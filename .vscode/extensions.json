@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "christian-kohler.npm-intellisense",
+    "davidanson.vscode-markdownlint",
+    "github.vscode-github-actions",
+    "fallow-rs.fallow-vscode",
+    "pflannery.vscode-versionlens",
+    "oven.bun-vscode",
+    "oxc.oxc-vscode",
+    "wix.vscode-import-cost"
+  ]
+}

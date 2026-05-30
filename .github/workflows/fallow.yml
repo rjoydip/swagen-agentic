@@ -1,0 +1,43 @@
+name: Code Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fallow:
+    name: Fallow Analysis
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+
+      - name: Run Fallow analysis
+        uses: fallow-rs/fallow@1fe7ae6722408aa817501c164933637a57af56a9 # v2.84.0
+        with:
+          format: sarif
+          comment: true
+          annotations: true
+          fail-on-issues: false
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        with:
+          sarif_file: fallow-results.sarif
+          category: fallow-analysis-${{ github.run_id }}

@@ -1,0 +1,15 @@
+node_modules/
+tests/
+.docs/
+.examples/
+.git/
+.github/
+.swagen/
+.env*
+bun.lock
+tsconfig.json
+oxlint.json
+.simple-git-hooks.json
+.changelogrc
+CHANGELOG.md
+AGENTS.md

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.swagen/cache/*
+.swagen/sessions/*
+.swagen/runs/*
+.swagen/test*
+# keep .swagen/runs/ for audit trail
+!.swagen/runs/
+*.env
+.env*
+!.env.example
+.fallow

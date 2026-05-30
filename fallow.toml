@@ -1,0 +1,30 @@
+"$schema" = "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json"
+
+ignorePatterns = [
+  "**/*.{generated,d}.ts",
+  "**/dist/**",
+  "**/.{artifacts,opencode}/**",
+  "examples/**",
+  "swagen.config.ts",
+  "tests/**",
+]
+dynamicallyLoaded = ["src/**/*.{ts}"]
+
+[rules]
+"unused-files" = "warn"
+"unused-exports" = "warn"
+"unused-types" = "warn"
+"unresolved-imports" = "error"
+"circular-dependency" = "warn"
+
+[duplicates]
+mode = "mild"
+minTokens = 50
+minLines = 8
+threshold = 0
+ignore = ["tests/**"]
+
+[health]
+maxCyclomatic = 20
+maxCognitive = 15
+ignore = ["{test,scripts,.e2e}/**", "src/**/*.ts"]

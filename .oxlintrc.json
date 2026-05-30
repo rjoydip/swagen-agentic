@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    "no-debugger": "error",
+    "no-console": "off",
+    "no-unused-vars": "warn",
+    "typescript/no-unused-vars": "warn",
+    "typescript/prefer-optional-chain": "warn"
+  }
+}

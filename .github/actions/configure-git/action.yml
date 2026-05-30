@@ -1,0 +1,28 @@
+name: Configure Git
+description: Configure Git user and remote URL with token
+
+inputs:
+  token:
+    description: GitHub token for remote URL
+    default: ""
+  user-email:
+    description: Git user email
+    default: "github-actions[bot]@users.noreply.github.com"
+  user-name:
+    description: Git user name
+    default: "github-actions[bot]"
+
+runs:
+  using: composite
+  steps:
+    - name: Configure Git user
+      shell: bash
+      run: |
+        git config --global user.email "${{ inputs.user-email }}"
+        git config --global user.name "${{ inputs.user-name }}"
+
+    - name: Configure Git remote URL with token
+      if: inputs.token != ''
+      shell: bash
+      run: |
+        git remote set-url origin https://x-access-token:${{ inputs.token }}@github.com/${{ github.repository }}.git

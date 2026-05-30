@@ -1,0 +1,53 @@
+name: Autofix
+
+# Required GitHub Secrets (set in repository settings -> Secrets and variables -> Actions):
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - "**.md"
+      - ".github/workflows/*.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: autofix-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  autofix:
+    name: Auto-fix Lint Issues
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GH_TOKEN }}
+          persist-credentials: true
+
+      - uses: ./.github/actions/configure-git
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-environment
+
+      - name: Check for dependency updates
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: bunx actions-up --dry-run
+
+      - name: Run auto-fix
+        run: bun run lint:fix
+
+      - name: Create commit
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+        with:
+          commit_message: "chore: apply automated lint fixes"
+          file_pattern: "*.ts *.tsx *.js *.json *.css *.scss"

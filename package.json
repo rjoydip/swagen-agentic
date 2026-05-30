@@ -1,0 +1,89 @@
+{
+  "name": "swagen-agentic",
+  "version": "0.0.0",
+  "description": "Agentic API test generation from Swagger/OpenAPI specs — built on @earendil-works/pi-ai + pi-agent-core",
+  "keywords": [
+    "agentic",
+    "api-testing",
+    "bun",
+    "openapi",
+    "swagger",
+    "test-generation"
+  ],
+  "homepage": "https://github.com/rjoydip/swagen-agentic",
+  "bugs": "https://github.com/rjoydip/swagen-agentic/issues",
+  "license": "MIT",
+  "author": "rjoydip",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rjoydip/swagen-agentic"
+  },
+  "bin": {
+    "swagen": "./src/cli/index.ts"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./harness": "./src/harness/index.ts",
+    "./storage": "./src/storage/index.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepare": "simple-git-hooks",
+    "start": "bun run src/cli/index.ts",
+    "bot:github": "bun run src/bot/github.ts",
+    "bot:cloudflare": "bun run src/bot/cloudflare.ts",
+    "test": "bun test",
+    "test:unit": "bun test tests/unit/",
+    "test:int": "bun test tests/integration/",
+    "test:watch": "bun test --watch",
+    "typecheck": "bun tsc --noEmit",
+    "lint": "oxlint . --format=github",
+    "lint:fix": "oxlint . --fix && oxfmt .",
+    "actions-up": "actions-up",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "fallow": "fallow",
+    "fallow:dead": "fallow dead-code",
+    "fallow:dupes": "fallow dupes",
+    "fallow:health": "fallow health --format badge > .swagen/fallow-badge.svg",
+    "fallow:fix": "fallow fix --dry-run",
+    "release": "bunx changelogen --release --push",
+    "changelog": "bunx changelogen --bump"
+  },
+  "dependencies": {
+    "@apidevtools/swagger-parser": "^10.1.1",
+    "@earendil-works/pi-agent-core": "^0.77.0",
+    "@earendil-works/pi-ai": "^0.77.0",
+    "@octokit/rest": "^20.1.2",
+    "@octokit/webhooks": "^13.9.1",
+    "openapi-types": "^12.1.3",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "actions-up": "^1.14.2",
+    "bun-types": "^1.3.14",
+    "changelogen": "^0.6.2",
+    "fallow": "^2.84.0",
+    "oxfmt": "^0.52.0",
+    "oxlint": "^1.67.0",
+    "simple-git-hooks": "^2.13.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.95.0"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "bun run lint && bun run typecheck && bun run fallow && bun run actions-up && bun run fallow:health"
+  },
+  "engines": {
+    "bun": ">=1.3"
+  }
+}

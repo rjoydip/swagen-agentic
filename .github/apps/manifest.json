@@ -1,0 +1,19 @@
+{
+  "name": "swagen",
+  "url": "https://github.com/rjoydip/swagen",
+  "description": "Agentic API test generation from OpenAPI specs",
+  "public": false,
+  "default_events": ["push", "pull_request", "pull_request_review"],
+  "default_permissions": {
+    "contents": "write",
+    "pull_requests": "write",
+    "issues": "write",
+    "metadata": "read"
+  },
+  "hook_attributes": {
+    "url": "https://YOUR_SERVER/webhook",
+    "active": true
+  },
+  "setup_url": "https://YOUR_SERVER/setup",
+  "redirect_url": "https://YOUR_SERVER/github-app-callback"
+}

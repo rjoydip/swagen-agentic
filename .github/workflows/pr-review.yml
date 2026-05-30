@@ -1,0 +1,88 @@
+name: PR Review
+
+# Required GitHub Secrets (set in repository settings -> Secrets and variables -> Actions):
+#   OPENCODE_MODEL - Model for OpenCode (fallback: opencode/minimax-m2.5-free)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: >
+      github.actor != 'dependabot[bot]' && (
+        github.event_name == 'pull_request' ||
+        (github.event_name == 'issue_comment' &&
+         github.event.issue.pull_request != null &&
+         (startsWith(github.event.comment.body, '/oc') ||
+          startsWith(github.event.comment.body, '/opencode')))
+      )
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: false
+
+      - uses: ./.github/actions/configure-git
+
+      - name: Run Code Review
+        uses: anomalyco/opencode/github@58a27b95c155d3f7d9b9f25b30eb1233bfb0eae5 # v1.15.12
+        timeout-minutes: 10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        with:
+          share: true
+          use_github_token: true
+          model: ${{ vars.OPENCODE_MODEL || 'opencode/big-pickle' }}
+          prompt: |
+            You are performing a professional code review for a pull request. Review ONLY the changes shown in the diff below — do not comment on unchanged code. Your goal is to provide clear, actionable, and structured feedback.
+
+            ## Review Guidelines
+
+            ### 1. Code Quality
+            - Identify readability issues, naming inconsistencies, or unclear logic
+            - Check adherence to best practices and coding standards
+            - Highlight overly complex or redundant code
+
+            ### 2. Potential Bugs & Edge Cases
+            - Look for logical errors, race conditions, or incorrect assumptions
+            - Identify missing error handling or null/undefined checks
+            - Consider edge cases that are not handled
+
+            ### 3. Performance & Scalability
+            - Point out inefficient algorithms or unnecessary computations
+            - Highlight potential bottlenecks or memory issues
+
+            ### 4. Security Concerns
+            - Identify vulnerabilities (e.g., injection risks, improper validation)
+            - Check for sensitive data exposure or unsafe operations
+
+            ### 5. Testing & Reliability
+            - Verify if adequate test coverage exists
+            - Suggest missing test cases (unit/integration/edge cases)
+
+            ### 6. Maintainability & Design
+            - Evaluate modularity, separation of concerns, and reusability
+            - Suggest improvements for long-term maintainability
+
+            ---
+
+            ## Output Format
+            Use a table format for each category with columns: Status | Category | Description | Location | Suggestion
+
+            ### Emoji Status Legend
+            - ✅ = Good, 💡 = Observation, ⚠️ = Concern, 🔧 = Minor, 🔴 = Major, 🛡️ = Security, 🎯 = LGTM, 📝 = Gaps, ⚡ = Edge Cases, 📈 = Reliability, 🏗️ = Maintainability
+
+            ## Final Verdict
+            Use appropriate emoji. If no issues: ✅🎯 LGTM. Minor only: 🔧🎯 LGTM (minor). Concerns: ⚠️ Review needed. Major: 🔴 Changes requested. Summarize in 1-2 lines.
