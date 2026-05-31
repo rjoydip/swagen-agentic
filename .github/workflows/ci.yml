@@ -1,4 +1,4 @@
-name: CI
+name: CI — swagen
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths: ["openapi.yaml", "openapi.json", "swagger.yaml", "swagger.json"]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    paths: ["openapi.yaml", "openapi.json", "swagger.yaml", "swagger.json"]
   repository_dispatch:
     types: [swagen-generate]
   workflow_dispatch:
