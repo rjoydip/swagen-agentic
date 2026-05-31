@@ -1,11 +1,8 @@
-name: swagen — Agentic API test generation
+name: CI
 
 on:
-  push:
-    branches: [main]
-    paths: ["openapi.yaml", "openapi.json", "swagger.yaml", "swagger.json"]
   pull_request:
-    paths: ["openapi.yaml", "openapi.json", "swagger.yaml", "swagger.json"]
+    types: [opened, synchronize, reopened, ready_for_review]
   repository_dispatch:
     types: [swagen-generate]
   workflow_dispatch:
@@ -36,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/setup-env
       - name: Typecheck
         run: bun tsc --noEmit
       - name: Lint
@@ -53,7 +50,7 @@ jobs:
     needs: lint-test
 
     steps:
-      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/setup-env
 
       - name: Determine spec path
         id: spec
