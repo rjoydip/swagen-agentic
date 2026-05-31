@@ -34,12 +34,12 @@ jobs:
           token: ${{ secrets.GH_TOKEN }}
           persist-credentials: true
 
-      - uses: ./.github/actions/configure-git
+      - uses: ./.github/actions/git
         with:
           token: ${{ secrets.GH_TOKEN }}
 
       - name: Setup Environment
-        uses: ./.github/actions/setup-environment
+        uses: ./.github/actions/setup
 
       - name: Check for dependency updates
         env:
