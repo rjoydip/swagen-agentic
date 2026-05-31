@@ -70,11 +70,11 @@ See skills/graphql/SKILL.md for GraphQL testing rules.
 
 Each skill also has a module for swagen's built-in skill system. These self-activate when `SkillManager.resolve()` detects matching endpoint metadata. System prompts live in [`src/core/prompts.ts`](../../src/core/prompts.ts) shared across all skills.
 
-| Skill   | Swagen module            |
-| ------- | ------------------------ |
-| REST    | `src/skills/rest.ts`     |
-| GraphQL | `src/skills/graphql.ts`  |
-| gRPC    | `src/skills/grpc.ts`     |
-| SOAP    | `src/skills/soap.ts`     |
+| Skill   | Swagen module           |
+| ------- | ----------------------- |
+| REST    | `src/skills/rest.ts`    |
+| GraphQL | `src/skills/graphql.ts` |
+| gRPC    | `src/skills/grpc.ts`    |
+| SOAP    | `src/skills/soap.ts`    |
 
 See [docs/skills.md](skills.md) for the full swagen skill system documentation.

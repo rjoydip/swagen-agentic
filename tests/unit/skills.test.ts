@@ -505,35 +505,88 @@ describe("rest skill module", () => {
 
   it("activates on RESTful methods", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "get", path: "/items", tags: [], params: [], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "get",
+          path: "/items",
+          tags: [],
+          params: [],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(restSkill.activation(ctx)).toBe(true);
   });
 
   it("activates on security presence", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "get", path: "/items", tags: [], params: [], responses: [], security: [["api_key"]], operationId: "x" } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "get",
+          path: "/items",
+          tags: [],
+          params: [],
+          responses: [],
+          security: [["api_key"]],
+          operationId: "x",
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(restSkill.activation(ctx)).toBe(true);
   });
 
   it("activates on pagination params", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "get", path: "/items", tags: [], params: [{ name: "page", in: "query" }], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "get",
+          path: "/items",
+          tags: [],
+          params: [{ name: "page", in: "query" }],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(restSkill.activation(ctx)).toBe(true);
   });
 
   it("activates on 4xx error responses", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "get", path: "/items", tags: [], params: [], responses: [{ statusCode: 400, contentType: "application/json", schema: {}, description: "Bad Request" }], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "get",
+          path: "/items",
+          tags: [],
+          params: [],
+          responses: [
+            {
+              statusCode: 400,
+              contentType: "application/json",
+              schema: {},
+              description: "Bad Request",
+            },
+          ],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(restSkill.activation(ctx)).toBe(true);
   });
 
   it("activates on auth/security tag", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "get", path: "/items", tags: ["auth"], params: [], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "get",
+          path: "/items",
+          tags: ["auth"],
+          params: [],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(restSkill.activation(ctx)).toBe(true);
   });
@@ -544,7 +597,16 @@ describe("rest skill module", () => {
 
   it("does not activate for non-RESTful method without other triggers", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "options", path: "/items", tags: [], params: [], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "options",
+          path: "/items",
+          tags: [],
+          params: [],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(restSkill.activation(ctx)).toBe(false);
   });
@@ -563,21 +625,48 @@ describe("graphql skill module", () => {
 
   it("activates on /graphql path", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "post", path: "/graphql", tags: [], params: [], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "post",
+          path: "/graphql",
+          tags: [],
+          params: [],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(graphqlSkill.activation(ctx)).toBe(true);
   });
 
   it("activates on graphql tag", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "get", path: "/api", tags: ["graphql"], params: [], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "get",
+          path: "/api",
+          tags: ["graphql"],
+          params: [],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(graphqlSkill.activation(ctx)).toBe(true);
   });
 
   it("activates on query/mutation/params", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "post", path: "/api", tags: [], params: [{ name: "query", in: "body" }], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "post",
+          path: "/api",
+          tags: [],
+          params: [{ name: "query", in: "body" }],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(graphqlSkill.activation(ctx)).toBe(true);
   });
@@ -600,21 +689,48 @@ describe("grpc skill module", () => {
 
   it("activates on /rpc/ path", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "post", path: "/rpc/UserService/Find", tags: [], params: [], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "post",
+          path: "/rpc/UserService/Find",
+          tags: [],
+          params: [],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(grpcSkill.activation(ctx)).toBe(true);
   });
 
   it("activates on grpc tag", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "post", path: "/api", tags: ["grpc"], params: [], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "post",
+          path: "/api",
+          tags: ["grpc"],
+          params: [],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(grpcSkill.activation(ctx)).toBe(true);
   });
 
   it("activates on proto path", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "post", path: "/proto/Service/Do", tags: [], params: [], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "post",
+          path: "/proto/Service/Do",
+          tags: [],
+          params: [],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(grpcSkill.activation(ctx)).toBe(true);
   });
@@ -637,21 +753,48 @@ describe("soap skill module", () => {
 
   it("activates on soap path", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "post", path: "/soap/WeatherService", tags: [], params: [], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "post",
+          path: "/soap/WeatherService",
+          tags: [],
+          params: [],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(soapSkill.activation(ctx)).toBe(true);
   });
 
   it("activates on wsdl tag", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "post", path: "/service", tags: ["wsdl"], params: [], responses: [], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "post",
+          path: "/service",
+          tags: ["wsdl"],
+          params: [],
+          responses: [],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(soapSkill.activation(ctx)).toBe(true);
   });
 
   it("activates on XML content type", () => {
     const ctx = makeContext({
-      endpoints: [{ method: "post", path: "/service", tags: [], params: [], responses: [{ statusCode: 200, contentType: "text/xml", schema: {}, description: "OK" }], security: [] } as unknown as ResolvedEndpoint],
+      endpoints: [
+        {
+          method: "post",
+          path: "/service",
+          tags: [],
+          params: [],
+          responses: [{ statusCode: 200, contentType: "text/xml", schema: {}, description: "OK" }],
+          security: [],
+        } as unknown as ResolvedEndpoint,
+      ],
     });
     expect(soapSkill.activation(ctx)).toBe(true);
   });

@@ -164,7 +164,7 @@ interface SkillHook {
 When a skill provides extra tools, they are **appended** after the core tool list. If a skill tool has the same `name` as a core tool, the core tool takes precedence (no override).
 
 ```ts
-tools = [...coreTools, ...skillTools]
+tools = [...coreTools, ...skillTools];
 ```
 
 ---

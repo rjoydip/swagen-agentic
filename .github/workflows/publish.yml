@@ -30,8 +30,10 @@ jobs:
         run: bun tsc --noEmit
       - name: Lint
         run: bun run lint
-      - name: Test
+      - name: Unit test
         run: bun test tests/unit/
+      - name: Integration test
+        run: bun test tests/integration/
       - name: Publish
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

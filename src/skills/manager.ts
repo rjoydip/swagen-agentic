@@ -8,12 +8,7 @@ export interface ResolvedSkills {
   inactive: Skill[];
 }
 
-const BUILTIN_PATHS = [
-  "./rest.ts",
-  "./graphql.ts",
-  "./grpc.ts",
-  "./soap.ts",
-] as const;
+const BUILTIN_PATHS = ["./rest.ts", "./graphql.ts", "./grpc.ts", "./soap.ts"] as const;
 
 export class SkillManager {
   private registry = new Map<string, Skill>();

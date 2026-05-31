@@ -79,7 +79,12 @@ describe("skill prompt constants", () => {
   });
 
   it("all skill prompts include dedup warning", () => {
-    for (const p of [REST_SKILL_PROMPT, GRAPHQL_SKILL_PROMPT, GRPC_SKILL_PROMPT, SOAP_SKILL_PROMPT]) {
+    for (const p of [
+      REST_SKILL_PROMPT,
+      GRAPHQL_SKILL_PROMPT,
+      GRPC_SKILL_PROMPT,
+      SOAP_SKILL_PROMPT,
+    ]) {
       expect(p).toContain("Avoid generating duplicate tests");
     }
   });
@@ -91,7 +96,13 @@ describe("buildSkillSystemPrompt", () => {
   });
 
   it("returns base unchanged when all prompts are falsy", () => {
-    expect(buildSkillSystemPrompt("base", ["", null as unknown as string, undefined as unknown as string])).toBe("base");
+    expect(
+      buildSkillSystemPrompt("base", [
+        "",
+        null as unknown as string,
+        undefined as unknown as string,
+      ]),
+    ).toBe("base");
   });
 
   it("appends active skill prompts under heading", () => {
