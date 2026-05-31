@@ -1,4 +1,4 @@
-name: "Setup environment"
+name: "Setup swagen environment"
 description: "Install Bun and install dependencies"
 inputs:
   bun-version:
