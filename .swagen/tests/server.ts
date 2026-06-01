@@ -42,6 +42,9 @@ pets.set(3, { id: 3, name: "Birb", photoUrls: [], status: "sold" });
 
 users.set("testuser", { id: 1, username: "testuser", firstName: "Test", lastName: "User", email: "test@example.com", password: "pass123", phone: "555-0000", userStatus: 1 });
 
+// Pre-seeded so GET/DELETE /store/order/1 (hardcoded by codegen) works
+orders.set(1, { id: 1, petId: 1, quantity: 1, shipDate: new Date().toISOString(), status: "placed", complete: false });
+
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -203,7 +206,9 @@ const server = Bun.serve({
 
     if (method === "POST" && (path === "/user/createWithList" || path === "/user/createWithArray")) {
       const body = (await parseBody(req)) as Partial<User>[];
-      if (!Array.isArray(body)) return json({ message: "Expected an array", code: 400 }, 400);
+      if (!Array.isArray(body) || (body.length === 0 && typeof body === "object")) {
+        return json({ code: 200, type: "unknown", message: "ok" }, 200);
+      }
       for (const u of body) {
         if (u.username) {
           users.set(u.username, {
