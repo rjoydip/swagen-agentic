@@ -39,7 +39,7 @@ jobs:
           token: ${{ secrets.GH_TOKEN }}
 
       - name: Setup Environment
-        uses: ./.github/actions/setup-environment
+        uses: ./.github/actions/setup-env
 
       - name: Check for dependency updates
         env:

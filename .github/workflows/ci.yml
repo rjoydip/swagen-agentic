@@ -1,11 +1,12 @@
-name: swagen — Agentic API test generation
+name: CI — swagen
 
 on:
   push:
     branches: [main]
-    paths: ["openapi.yaml", "openapi.json", "swagger.yaml", "swagger.json"]
+    paths: ["src/**", "tests/**", "swagen.config*"]
   pull_request:
-    paths: ["openapi.yaml", "openapi.json", "swagger.yaml", "swagger.json"]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ["src/**", "tests/**", "swagen.config*"]
   repository_dispatch:
     types: [swagen-generate]
   workflow_dispatch:
@@ -36,7 +37,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: ./.github/actions/setup
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-env
       - name: Typecheck
         run: bun tsc --noEmit
       - name: Lint
@@ -53,7 +57,10 @@ jobs:
     needs: lint-test
 
     steps:
-      - uses: ./.github/actions/setup
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-env
 
       - name: Determine spec path
         id: spec
@@ -100,8 +107,6 @@ jobs:
     name: Run generated tests
     needs: swagen
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' && inputs.run_tests == 'true'
-
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
