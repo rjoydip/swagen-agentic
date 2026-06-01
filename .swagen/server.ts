@@ -75,7 +75,10 @@ function json(data: unknown, status = 200): Response {
 }
 
 function parseBody(req: Request): Promise<unknown> {
-  return req.json().catch(() => null);
+  return req.json().catch((e) => {
+    process.stderr.write(`[mock-server] JSON parse error: ${e.message}\n`);
+    return null;
+  });
 }
 
 const server = Bun.serve({
@@ -126,7 +129,7 @@ const server = Bun.serve({
     }
 
     if (method === "GET" && path === "/pet/findByTags") {
-      const tags = url.searchParams.get("tags")?.split(",") ?? [];
+      const tags = (url.searchParams.get("tags") ?? "").split(",").filter(Boolean);
       const result: Pet[] = [];
       for (const pet of pets.values()) {
         if (pet.tags?.some((t) => tags.includes(t.name))) result.push(pet);
@@ -145,10 +148,11 @@ const server = Bun.serve({
       }
 
       if (method === "POST") {
-        const body = (await parseBody(req)) as Partial<Pet>;
+        const body = await parseBody(req) as Record<string, unknown> | null ?? {};
         const existing = pets.get(petId);
         if (!existing) return json({ message: "Pet not found", code: 404 }, 404);
-        const updated: Pet = { ...existing, ...body };
+        const updated: Pet = { ...existing, ...body, id: petId };
+        if (body.name) updated.name = String(body.name);
         pets.set(petId, updated);
         return json(updated, 200);
       }
@@ -231,7 +235,7 @@ const server = Bun.serve({
       (path === "/user/createWithList" || path === "/user/createWithArray")
     ) {
       const body = (await parseBody(req)) as Partial<User>[];
-      if (!Array.isArray(body) || (body.length === 0 && typeof body === "object")) {
+      if (!Array.isArray(body) || body.length === 0) {
         return json({ code: 200, type: "unknown", message: "ok" }, 200);
       }
       for (const u of body) {
