@@ -3,10 +3,12 @@ name: CI — swagen
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/**", "src/**", "tests/**", "swagen.config*", "package.json", "bun.lock"]
+    paths:
+      [".github/workflows/**", "src/**", "tests/**", "swagen.config*", "package.json", "bun.lock"]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: [".github/workflows/**", "src/**", "tests/**", "swagen.config*", "package.json", "bun.lock"]
+    paths:
+      [".github/workflows/**", "src/**", "tests/**", "swagen.config*", "package.json", "bun.lock"]
   repository_dispatch:
     types: [swagen-generate]
   workflow_dispatch:
@@ -124,7 +126,7 @@ jobs:
 
       - name: Start mock server
         run: |
-          bun run .swagen/tests/server.ts &
+          bun run .swagen/server.ts &
           for i in $(seq 1 20); do
             if curl -s http://localhost:3000/pet/1 > /dev/null 2>&1; then
               echo "Mock server ready"

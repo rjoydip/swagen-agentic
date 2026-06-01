@@ -36,14 +36,36 @@ const orders = new Map<number, Order>();
 let nextPetId = 100;
 let nextOrderId = 1000;
 
-pets.set(1, { id: 1, name: "Doggo", photoUrls: ["https://example.com/dog.jpg"], tags: [{ id: 1, name: "friendly" }], status: "available" });
+pets.set(1, {
+  id: 1,
+  name: "Doggo",
+  photoUrls: ["https://example.com/dog.jpg"],
+  tags: [{ id: 1, name: "friendly" }],
+  status: "available",
+});
 pets.set(2, { id: 2, name: "Kitty", photoUrls: [], status: "pending" });
 pets.set(3, { id: 3, name: "Birb", photoUrls: [], status: "sold" });
 
-users.set("testuser", { id: 1, username: "testuser", firstName: "Test", lastName: "User", email: "test@example.com", password: "pass123", phone: "555-0000", userStatus: 1 });
+users.set("testuser", {
+  id: 1,
+  username: "testuser",
+  firstName: "Test",
+  lastName: "User",
+  email: "test@example.com",
+  password: "pass123",
+  phone: "555-0000",
+  userStatus: 1,
+});
 
 // Pre-seeded so GET/DELETE /store/order/1 (hardcoded by codegen) works
-orders.set(1, { id: 1, petId: 1, quantity: 1, shipDate: new Date().toISOString(), status: "placed", complete: false });
+orders.set(1, {
+  id: 1,
+  petId: 1,
+  quantity: 1,
+  shipDate: new Date().toISOString(),
+  status: "placed",
+  complete: false,
+});
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -204,7 +226,10 @@ const server = Bun.serve({
       return json({ code: 200, type: "unknown", message: String(user.id) }, 200);
     }
 
-    if (method === "POST" && (path === "/user/createWithList" || path === "/user/createWithArray")) {
+    if (
+      method === "POST" &&
+      (path === "/user/createWithList" || path === "/user/createWithArray")
+    ) {
       const body = (await parseBody(req)) as Partial<User>[];
       if (!Array.isArray(body) || (body.length === 0 && typeof body === "object")) {
         return json({ code: 200, type: "unknown", message: "ok" }, 200);
