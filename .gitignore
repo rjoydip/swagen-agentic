@@ -3,7 +3,8 @@ dist/
 .swagen/cache/*
 .swagen/sessions/*
 .swagen/runs/*
-.swagen/test*
+.swagen/tests/*/
+.swagen/test-sessions/
 # keep .swagen/runs/ for audit trail
 !.swagen/runs/
 *.env
