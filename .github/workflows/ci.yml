@@ -3,10 +3,12 @@ name: CI — swagen
 on:
   push:
     branches: [main]
-    paths: ["src/**", "tests/**", "swagen.config*"]
+    paths:
+      [".github/workflows/**", "src/**", "tests/**", "swagen.config*", "package.json", "bun.lock"]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: ["src/**", "tests/**", "swagen.config*"]
+    paths:
+      [".github/workflows/**", "src/**", "tests/**", "swagen.config*", "package.json", "bun.lock"]
   repository_dispatch:
     types: [swagen-generate]
   workflow_dispatch:
@@ -113,8 +115,41 @@ jobs:
       - run: bun install
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with: { name: generated-api-tests, path: .swagen/tests/bun_api/ }
-      - name: Run tests
+        continue-on-error: true
+
+      - name: Validate artifact has test files
+        run: |
+          if [ ! -d .swagen/tests/bun_api ] || [ -z "$(ls .swagen/tests/bun_api/*.test.ts 2>/dev/null)" ]; then
+            echo "::error::No generated test files in artifact — swagen job may have produced no tests"
+            exit 1
+          fi
+
+      - name: Start mock server
+        run: |
+          bun run .swagen/server.ts &
+          for i in $(seq 1 20); do
+            if curl -s http://localhost:3000/pet/1 > /dev/null 2>&1; then
+              echo "Mock server ready"
+              break
+            fi
+            sleep 0.5
+          done
+          # Verify server is actually up
+          curl -sf http://localhost:3000/pet/1 > /dev/null || { echo "Mock server failed to start"; exit 1; }
+
+      - name: Stage and run generated tests
         env:
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
-          API_TOKEN: ${{ secrets.API_TOKEN }}
-        run: bun test .swagen/tests/bun_api/
+          API_BASE_URL: http://localhost:3000
+          API_TOKEN: mock-token
+        run: |
+          mkdir -p generated-bun-tests
+          cp -r .swagen/tests/bun_api/. generated-bun-tests/
+          bun test generated-bun-tests/
+
+      - name: Stop mock server
+        if: always()
+        run: kill %1 2>/dev/null || true
+
+      - name: Verify temporary dir is gitignored
+        if: always()
+        run: git check-ignore generated-bun-tests/

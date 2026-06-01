@@ -6,6 +6,7 @@ ignorePatterns = [
   "**/.{artifacts,opencode}/**",
   "examples/**",
   "swagen.config.ts",
+  ".swagen/server.ts",
   "tests/**",
 ]
 dynamicallyLoaded = ["src/**/*.{ts}"]
