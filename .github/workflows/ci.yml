@@ -3,10 +3,10 @@ name: CI — swagen
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/**", "src/**", "tests/**", "swagen.config*", "package.json", "bun.lockb"]
+    paths: [".github/workflows/**", "src/**", "tests/**", "swagen.config*", "package.json", "bun.lock"]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: [".github/workflows/**", "src/**", "tests/**", "swagen.config*", "package.json", "bun.lockb"]
+    paths: [".github/workflows/**", "src/**", "tests/**", "swagen.config*", "package.json", "bun.lock"]
   repository_dispatch:
     types: [swagen-generate]
   workflow_dispatch:
