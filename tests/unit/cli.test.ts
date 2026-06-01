@@ -10,7 +10,12 @@ import {
   ConfigValidationError,
   SwagenConfigSchema,
 } from "../../src/core/schema.ts";
-import { friendlyError, MissingApiKeyError, checkApiKey } from "../../src/utils/errors.ts";
+import {
+  friendlyError,
+  MissingApiKeyError,
+  checkApiKey,
+  NetworkError,
+} from "../../src/utils/errors.ts";
 
 const TEST_DIR = join(tmpdir(), "swagen-cli-test-" + Date.now());
 
@@ -128,6 +133,44 @@ describe("Error helpers", () => {
   it("friendlyError wraps network errors", () => {
     const result = friendlyError(new Error("fetch failed: ENOTFOUND"));
     expect(result).toContain("Network error");
+  });
+
+  it("friendlyError wraps ECONNREFUSED", () => {
+    const result = friendlyError(new Error("connect ECONNREFUSED"));
+    expect(result).toContain("Network error");
+  });
+
+  it("friendlyError wraps network word in message", () => {
+    const result = friendlyError(new Error("a network error occurred"));
+    expect(result).toContain("Network error");
+  });
+
+  it("friendlyError wraps SpecLoadError by name", () => {
+    const err = new Error("$ref resolution failed");
+    err.name = "SpecLoadError";
+    const result = friendlyError(err);
+    expect(result).toContain("Spec error");
+  });
+
+  it("friendlyError handles non-Error thrown objects", () => {
+    const result = friendlyError("just a string");
+    expect(result).toContain("just a string");
+  });
+
+  it("friendlyError handles null", () => {
+    const result = friendlyError(null);
+    expect(result).toContain("null");
+  });
+
+  it("NetworkError has correct name and message", () => {
+    const err = new NetworkError("fetching spec", "timeout");
+    expect(err.name).toBe("NetworkError");
+    expect(err.message).toContain("fetching spec");
+    expect(err.message).toContain("timeout");
+  });
+
+  it("checkApiKey does not throw for faux provider", () => {
+    expect(() => checkApiKey("faux")).not.toThrow();
   });
 });
 

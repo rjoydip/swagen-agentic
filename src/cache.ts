@@ -9,7 +9,7 @@
  * Cache keys are SHA-256 hashes of (tool_name + JSON.stringify(args)).
  */
 
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { CacheConfig, CacheEntry } from "./core/types.ts";
 
@@ -153,9 +153,7 @@ export class FileCache implements ICache {
     try {
       const entry = JSON.parse(await Bun.file(p).text()) as CacheEntry<T>;
       if (Date.now() > entry.expiresAt) {
-        try {
-          Bun.spawnSync(["rm", "-f", p]);
-        } catch {}
+        rmSync(p, { force: true });
         this.misses++;
         return null;
       }
@@ -181,13 +179,13 @@ export class FileCache implements ICache {
 
   async delete(key: string): Promise<void> {
     const p = this.path(key);
-    if (existsSync(p)) Bun.spawnSync(["rm", "-f", p]);
+    rmSync(p, { force: true });
   }
 
   async clear(): Promise<void> {
     const glob = new Bun.Glob("*.json");
     for await (const f of glob.scan(this.dir)) {
-      Bun.spawnSync(["rm", "-f", join(this.dir, f)]);
+      rmSync(join(this.dir, f), { force: true });
     }
   }
 

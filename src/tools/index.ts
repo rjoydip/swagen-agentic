@@ -474,6 +474,42 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
     },
   };
 
+  // ── 12. task_complete ─────────────────────────────────────────────────────
+  //
+  // Signals that the agent has finished its work. The LLM should call this
+  // when it believes all requested tests have been generated and written.
+  // Providing a clear summary helps produce a better final report.
+
+  const taskComplete: AgentTool<any, any> = {
+    name: "task_complete",
+    label: "Task Complete",
+    description:
+      "Signal that the agent has finished generating tests. Call this when all requested endpoints have been handled. Provide a concise summary of what was done.",
+    parameters: Type.Object({
+      summary: Type.String({
+        description: "Concise summary of what was accomplished (what was generated, any issues).",
+      }),
+      endpointCount: Type.Optional(Type.Number({ description: "Total endpoints processed." })),
+      fileCount: Type.Optional(Type.Number({ description: "Total files written." })),
+    }),
+    async execute(_id: string, params: unknown) {
+      const args = params as {
+        summary: string;
+        endpointCount?: number;
+        fileCount?: number;
+      };
+      return ok(
+        {
+          message: "Task marked as complete.",
+          summary: args.summary,
+          endpointCount: args.endpointCount ?? state.endpoints?.length ?? 0,
+          fileCount: args.fileCount ?? state.generatedFiles?.length ?? 0,
+        },
+        { endpointCount: args.endpointCount ?? 0 },
+      );
+    },
+  };
+
   return [
     validateSpec,
     loadSpecTool,
@@ -486,5 +522,6 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
     cacheStats,
     searchFiles,
     replaceInFiles,
+    taskComplete,
   ];
 }

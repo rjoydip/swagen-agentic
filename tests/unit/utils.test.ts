@@ -12,8 +12,14 @@ import {
   truncate,
   stripAnsi,
   ansi,
+  supportsColor,
+  hr,
+  printHelp,
+  createSpinner,
 } from "../../src/utils/fmt.ts";
+import type { CommandDef } from "../../src/utils/fmt.ts";
 import { MemoryCache, NoopCache, createCache, cacheKey, withCache } from "../../src/cache.ts";
+import { logger } from "../../src/utils/logger.ts";
 
 // ─── parseArgs ────────────────────────────────────────────────────────────────
 
@@ -39,6 +45,12 @@ describe("parseArgs", () => {
   it("parses --no-flag", () => {
     const r = parseArgs(["gen", "api.yaml", "--no-fixtures"]);
     expect(r.flags["fixtures"]).toBe(false);
+  });
+
+  it("parses --flag=value syntax", () => {
+    const r = parseArgs(["--runner=vitest", "--out-dir=__tests__"]);
+    expect(r.flags["runner"]).toBe("vitest");
+    expect(r.flags["out-dir"]).toBe("__tests__");
   });
 
   it("parses -f shorthand", () => {
@@ -271,6 +283,144 @@ describe("NoopCache", () => {
     expect(s.entries).toBe(0);
     expect(s.hits).toBe(0);
     expect(s.misses).toBe(0);
+  });
+});
+
+// ─── supportsColor ─────────────────────────────────────────────────────────────
+
+describe("supportsColor", () => {
+  it("returns false when NO_COLOR is set", () => {
+    process.env["NO_COLOR"] = "1";
+    expect(supportsColor()).toBe(false);
+    delete process.env["NO_COLOR"];
+  });
+
+  it("returns true when FORCE_COLOR is set", () => {
+    process.env["FORCE_COLOR"] = "1";
+    expect(supportsColor()).toBe(true);
+    delete process.env["FORCE_COLOR"];
+  });
+});
+
+// ─── hr ───────────────────────────────────────────────────────────────────────
+
+describe("hr", () => {
+  it("returns default width of 64", () => {
+    expect(hr()).toHaveLength(64);
+  });
+
+  it("uses custom character", () => {
+    expect(hr("=")).toBe("=".repeat(64));
+  });
+
+  it("uses custom width", () => {
+    expect(hr("-", 10)).toBe("-".repeat(10));
+  });
+});
+
+// ─── printHelp ─────────────────────────────────────────────────────────────────
+
+describe("printHelp", () => {
+  it("outputs to stdout and includes all commands", () => {
+    const commands: CommandDef[] = [
+      { name: "generate", args: "<spec>", description: "Generate tests" },
+      { name: "run", args: "<spec>", description: "Run tests" },
+    ];
+    const write = process.stdout.write.bind(process.stdout);
+    const chunks: string[] = [];
+    process.stdout.write = (c: string) => {
+      chunks.push(c);
+      return true;
+    };
+    printHelp(commands, "1.0.0");
+    process.stdout.write = write;
+    const output = chunks.join("");
+    expect(output).toContain("generate");
+    expect(output).toContain("run");
+    expect(output).toContain("v1.0.0");
+  });
+});
+
+// ─── createSpinner ────────────────────────────────────────────────────────────
+
+describe("createSpinner", () => {
+  it("returns spinner with text property", () => {
+    process.env["NO_COLOR"] = "1";
+    const s = createSpinner("working...");
+    expect(s.text).toBe("working...");
+    s.text = "updated";
+    expect(s.text).toBe("updated");
+    s.stop();
+    delete process.env["NO_COLOR"];
+  });
+});
+
+// ─── parseArgs additional edge cases ──────────────────────────────────────────
+
+describe("parseArgs edge cases", () => {
+  it("handles empty flag value as boolean", () => {
+    const r = parseArgs(["--flag"]);
+    expect(r.flags["flag"]).toBe(true);
+  });
+
+  it("handles --flag=value with empty value", () => {
+    const r = parseArgs(["--flag="]);
+    expect(r.flags["flag"]).toBe("");
+  });
+
+  it("preserves positionals mixed with boolean flags at end", () => {
+    const r = parseArgs(["generate", "spec.yaml", "--verbose", "--dry-run"]);
+    expect(r.command).toBe("generate");
+    expect(r.positionals).toEqual(["spec.yaml"]);
+    expect(r.flags["verbose"]).toBe(true);
+    expect(r.flags["dry-run"]).toBe(true);
+  });
+
+  it("handles mixed --flag=value and --flag value", () => {
+    const r = parseArgs(["--runner=vitest", "--out-dir", "tests"]);
+    expect(r.flags["runner"]).toBe("vitest");
+    expect(r.flags["out-dir"]).toBe("tests");
+  });
+
+  it("--no-flag with valid key", () => {
+    const r = parseArgs(["--no-dry-run"]);
+    expect(r.flags["dry-run"]).toBe(false);
+  });
+});
+
+// ─── structured logger ────────────────────────────────────────────────────────
+
+describe("logger", () => {
+  it("logs at info level without throwing", () => {
+    expect(() => logger.info("test", "hello")).not.toThrow();
+  });
+
+  it("logs at warn and error levels", () => {
+    expect(() => logger.warn("ctx", "warning")).not.toThrow();
+    expect(() => logger.error("ctx", "error")).not.toThrow();
+  });
+
+  it("logs JSON format when LOG_FORMAT=json", () => {
+    process.env["LOG_FORMAT"] = "json";
+    const chunks: string[] = [];
+    const write = process.stderr.write.bind(process.stderr);
+    const mockWrite: any = (c: string) => {
+      chunks.push(c);
+      return true;
+    };
+    process.stderr.write = mockWrite;
+    logger.info("test", "msg", { key: "val" });
+    process.stderr.write = write;
+    const parsed = JSON.parse(chunks.join(""));
+    expect(parsed.level).toBe("info");
+    expect(parsed.context).toBe("test");
+    expect(parsed.message).toBe("msg");
+    expect(parsed.data?.key).toBe("val");
+    delete process.env["LOG_FORMAT"];
+  });
+
+  it("includes data in stderr output", () => {
+    expect(() => logger.debug("dbg", "detail", { n: 1 })).not.toThrow();
   });
 });
 

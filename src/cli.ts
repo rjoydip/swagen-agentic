@@ -6,7 +6,15 @@
  */
 
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
-import { parseArgs, printHelp, createSpinner, ansi, formatDuration } from "./utils/fmt.ts";
+import {
+  parseArgs,
+  printHelp,
+  printCommandHelp,
+  createSpinner,
+  ansi,
+  formatDuration,
+} from "./utils/fmt.ts";
+import type { CommandDef } from "./utils/fmt.ts";
 import { friendlyError } from "./utils/errors.ts";
 import { resolveConfig, starterConfig } from "./core/config.ts";
 import { getLastRun } from "./tools/state.ts";
@@ -24,43 +32,154 @@ import { existsSync } from "node:fs";
 const VERSION = JSON.parse(await Bun.file(join(import.meta.dir, "../../package.json")).text())
   .version as string;
 
-const COMMANDS = [
+const COMMANDS: CommandDef[] = [
   {
     name: "generate",
     args: "<spec>",
     description: "Agentic test generation from a spec file or URL",
+    flags: [
+      { flag: "--out-dir, -o <dir>", description: "Output directory (default: __tests__/api)" },
+      { flag: "--runner, -r <bun|vitest>", description: "Test runner (default: bun)" },
+      { flag: "--base-url <url>", description: "API base URL" },
+      { flag: "--include-tags <tags>", description: "Comma-separated tags to include" },
+      { flag: "--exclude-tags <tags>", description: "Comma-separated tags to exclude" },
+      { flag: "--skip <ids>", description: "Comma-separated operationIds to skip" },
+      { flag: "--dry-run", description: "Preview generated tests without writing" },
+      { flag: "--provider <name>", description: "AI provider (required)" },
+      { flag: "--model <id>", description: "Model id (required)" },
+      { flag: "--parallel <N>", description: "Split endpoints across N parallel agents" },
+      { flag: "--storage <backend>", description: "Session storage: memory|file|redis" },
+      { flag: "--verbose", description: "Stream all agent events to stderr" },
+    ],
+    examples: [
+      { cmd: "swagen generate openapi.yaml", desc: "Generate from a local spec" },
+      {
+        cmd: "swagen generate https://petstore.swagger.io/v3/openapi.json",
+        desc: "Generate from a URL",
+      },
+      { cmd: "swagen generate openapi.yaml --dry-run", desc: "Preview without writing" },
+      { cmd: "swagen generate openapi.yaml --parallel 3", desc: "Split endpoints across 3 agents" },
+    ],
   },
-  { name: "run", args: "<spec>", description: "Generate tests then immediately run them" },
-  { name: "validate", args: "<spec>", description: "Validate a spec without generating" },
+  {
+    name: "run",
+    args: "<spec>",
+    description: "Generate tests then immediately run them",
+    flags: [
+      { flag: "--out-dir, -o <dir>", description: "Output directory" },
+      { flag: "--runner, -r <bun|vitest>", description: "Test runner" },
+      { flag: "--base-url <url>", description: "API base URL" },
+      { flag: "--provider <name>", description: "AI provider (required)" },
+      { flag: "--model <id>", description: "Model id (required)" },
+      { flag: "--parallel <N>", description: "Split across N parallel agents" },
+      { flag: "--verbose", description: "Stream all agent events" },
+    ],
+    examples: [{ cmd: "swagen run openapi.yaml", desc: "Generate and run tests" }],
+  },
+  {
+    name: "validate",
+    args: "<spec>",
+    description: "Validate a spec without generating tests",
+    flags: [
+      { flag: "--provider <name>", description: "AI provider (required)" },
+      { flag: "--model <id>", description: "Model id (required)" },
+    ],
+    examples: [{ cmd: "swagen validate openapi.yaml", desc: "Validate spec via agent" }],
+  },
   {
     name: "resume",
     args: "<id>",
     description: "Resume a previous session with a follow-up prompt",
+    flags: [
+      { flag: "--prompt, -p <text>", description: "Follow-up instruction (required)" },
+      { flag: "--provider <name>", description: "AI provider" },
+      { flag: "--model <id>", description: "Model id" },
+    ],
+    examples: [
+      {
+        cmd: 'swagen resume sess_abc123 --prompt "Add tests for admin endpoints"',
+        desc: "Continue a previous session",
+      },
+    ],
   },
-  { name: "sessions", args: "", description: "List stored agent sessions" },
-  { name: "status", args: "", description: "Show last generation run summary" },
-  { name: "cache", args: "[clear]", description: "Show cache stats, or clear the cache" },
-  { name: "index", args: "[dir]", description: "Build or refresh the codebase index" },
-  { name: "init", args: "", description: "Create a starter swagen.config.ts" },
+  {
+    name: "sessions",
+    args: "",
+    description: "List stored agent sessions",
+    examples: [{ cmd: "swagen sessions", desc: "Show all sessions" }],
+  },
+  {
+    name: "status",
+    args: "",
+    description: "Show last generation run summary",
+    examples: [{ cmd: "swagen status", desc: "Show last run details" }],
+  },
+  {
+    name: "cache",
+    args: "[clear]",
+    description: "Show cache stats, or clear the cache",
+    examples: [
+      { cmd: "swagen cache", desc: "Show cache hit/miss stats" },
+      { cmd: "swagen cache clear", desc: "Clear all cached entries" },
+    ],
+  },
+  {
+    name: "index",
+    args: "[dir]",
+    description: "Build or refresh the codebase index",
+    examples: [
+      { cmd: "swagen index", desc: "Index current directory" },
+      { cmd: "swagen index src/", desc: "Index a specific directory" },
+    ],
+  },
+  {
+    name: "init",
+    args: "",
+    description: "Create a starter swagen.config.ts",
+    examples: [{ cmd: "swagen init", desc: "Create swagen.config.ts in current dir" }],
+  },
   {
     name: "bench",
     args: "<spec>",
-    description: "Benchmark spec loading, analysis, and codegen speed",
+    description: "Benchmark spec loading, analysis, and codegen (no agent call)",
+    flags: [{ flag: "--iterations <N>", description: "Number of benchmark runs (default: 3)" }],
+    examples: [
+      { cmd: "swagen bench openapi.yaml", desc: "Run 3 benchmark iterations" },
+      { cmd: "swagen bench openapi.yaml --iterations 10", desc: "Run 10 benchmark iterations" },
+    ],
   },
-  { name: "help", args: "", description: "Show this help" },
 ];
+
+const COMMAND_MAP = new Map(COMMANDS.map((c) => [c.name, c]));
 
 async function main() {
   const { command, positionals, flags } = parseArgs();
 
+  if (flags["version"] || flags["v"]) {
+    process.stdout.write(`swagen v${VERSION}\n`);
+    process.exit(0);
+  }
+
+  // Detailed help for a specific command
+  const helpTarget = command === "help" ? positionals[0] : null;
+  if (helpTarget && COMMAND_MAP.has(helpTarget)) {
+    printCommandHelp(COMMAND_MAP.get(helpTarget)!, VERSION);
+    process.exit(0);
+  }
+
+  // General help
   if (!command || command === "help" || flags["help"] || flags["h"]) {
     printHelp(COMMANDS, VERSION);
     process.exit(0);
   }
 
-  if (flags["version"] || flags["v"]) {
-    process.stdout.write(`swagen v${VERSION}\n`);
-    process.exit(0);
+  // --help on any command shows detailed help
+  if (flags["help"] || flags["h"]) {
+    const cmd = COMMAND_MAP.get(command);
+    if (cmd) {
+      printCommandHelp(cmd, VERSION);
+      process.exit(0);
+    }
   }
 
   const config = await resolveConfig(flagsToConfig(flags));
