@@ -164,15 +164,25 @@ export interface ParsedArgs {
 function consumeFlag(
   argv: string[],
   i: number,
-  key: string,
+  arg: string,
   flags: Record<string, string | boolean>,
 ): number {
-  // Returns i + 2 when next arg is consumed as a value, i + 1 for boolean flag
+  // Handle --key=value inline (key is extracted from the current arg)
+  const eqIdx = arg.indexOf("=");
+  if (eqIdx !== -1) {
+    const key = arg.startsWith("--") ? arg.slice(2, eqIdx) : arg.slice(1, eqIdx);
+    flags[key] = arg.slice(eqIdx + 1);
+    return i + 1;
+  }
+  // Handle --key value or -k value (value is the next argv element)
+  const prefixLen = arg.startsWith("--") ? 2 : 1;
+  const key = arg.slice(prefixLen);
   const next = argv[i + 1];
   if (next !== undefined && !next.startsWith("-")) {
     flags[key] = next;
     return i + 2;
   }
+  // Boolean flag (no value)
   flags[key] = true;
   return i + 1;
 }
@@ -189,16 +199,9 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
       flags[arg.slice(5)] = false;
       i++;
     } else if (arg.startsWith("--")) {
-      const eqIdx = arg.indexOf("=");
-      if (eqIdx !== -1) {
-        const key = arg.slice(2, eqIdx);
-        flags[key] = arg.slice(eqIdx + 1);
-        i += 1;
-      } else {
-        i = consumeFlag(argv, i, arg.slice(2), flags);
-      }
+      i = consumeFlag(argv, i, arg, flags);
     } else if (arg.startsWith("-") && arg.length === 2) {
-      i = consumeFlag(argv, i, arg.slice(1), flags);
+      i = consumeFlag(argv, i, arg, flags);
     } else {
       positionals.push(arg);
       i++;

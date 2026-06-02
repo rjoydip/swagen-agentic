@@ -167,13 +167,13 @@ async function main() {
     process.exit(0);
   }
 
-  // General help
-  if (!command || command === "help" || flags["help"] || flags["h"]) {
+  // General help — no command or explicit "help" subcommand
+  if (!command || command === "help") {
     printHelp(COMMANDS, VERSION);
     process.exit(0);
   }
 
-  // --help on any command shows detailed help
+  // --help/-h on any command shows per-command help
   if (flags["help"] || flags["h"]) {
     const cmd = COMMAND_MAP.get(command);
     if (cmd) {

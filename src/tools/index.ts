@@ -452,7 +452,7 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
             const searchPattern = args.regex ? new RegExp(args.pattern, "g") : args.pattern;
             const replaced = text.replaceAll(searchPattern as string | RegExp, args.replacement);
             if (replaced === text) continue;
-            const diff = (text.match(searchPattern as string | RegExp) ?? []).length;
+            const diff = text.split(searchPattern as string | RegExp).length - 1;
             const rel = file.slice(process.cwd().length + 1).replace(/\\/g, "/");
             changes.push({ file: rel, replaces: diff });
             if (!isDryRun) {
