@@ -179,7 +179,6 @@ describe("RedisStorage", () => {
       throw new Error("ECONNREFUSED");
     };
     globalThis.fetch = fn;
-    const { RedisStorage } = await import("../../src/storage.ts");
     store = new RedisStorage("https://mock-redis.example.com", "tok");
     expect(await store.getSession("fail")).toBeNull();
   });
@@ -191,7 +190,6 @@ describe("RedisStorage", () => {
       return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
     };
     globalThis.fetch = fn;
-    const { RedisStorage } = await import("../../src/storage.ts");
     store = new RedisStorage("https://redis.example.com", "tok");
     await store.putSession({
       id: "s1",
@@ -213,7 +211,6 @@ describe("RedisStorage", () => {
       return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
     };
     globalThis.fetch = fn;
-    const { RedisStorage } = await import("../../src/storage.ts");
     store = new RedisStorage("https://redis.example.com", "tok");
     await store.deleteSession("del-me");
     expect(calls.some((u) => u.includes("/del/swagen:session:del-me"))).toBe(true);
@@ -222,14 +219,12 @@ describe("RedisStorage", () => {
 
   it("listSessions returns empty array when no results", async () => {
     mockFetch({ result: [] });
-    const { RedisStorage } = await import("../../src/storage.ts");
     store = new RedisStorage("https://redis.example.com", "tok");
     expect(await store.listSessions()).toEqual([]);
   });
 
   it("listSessions returns session ids", async () => {
     mockFetch({ result: ["s1", "s2"] });
-    const { RedisStorage } = await import("../../src/storage.ts");
     store = new RedisStorage("https://redis.example.com", "tok");
     const ids = await store.listSessions();
     expect(ids).toEqual(["s1", "s2"]);
@@ -254,7 +249,6 @@ describe("RedisStorage", () => {
       return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
     };
     globalThis.fetch = fn;
-    const { RedisStorage } = await import("../../src/storage.ts");
     store = new RedisStorage("https://redis.example.com", "tok");
     await store.appendRun("session-a", {
       id: "run1",
@@ -267,7 +261,6 @@ describe("RedisStorage", () => {
 
   it("appendRun throws for missing session", async () => {
     mockFetch({ result: null });
-    const { RedisStorage } = await import("../../src/storage.ts");
     store = new RedisStorage("https://redis.example.com", "tok");
     await expect(
       store.appendRun("does-not-exist", {
@@ -286,7 +279,6 @@ describe("RedisStorage", () => {
       return new Response(JSON.stringify({ result: null }), { status: 200 });
     };
     globalThis.fetch = fn;
-    const { RedisStorage } = await import("../../src/storage.ts");
     store = new RedisStorage("https://redis.example.com/", "tok");
     await store.getSession("test");
     expect(calledUrl).not.toContain("//get");
