@@ -73,7 +73,7 @@ export function createSpinner(initial: string): Spinner {
         active = false;
       },
       fail(msg?: string) {
-        process.stdout.write("✗ " + (msg ?? current) + "\n");
+        process.stdout.write("x " + (msg ?? current) + "\n");
         active = false;
       },
       stop() {

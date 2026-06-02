@@ -10,6 +10,7 @@ import { withCache, cacheKey } from "../cache.ts";
 import type { ICache } from "../cache.ts";
 import type { GeneratedFile, ResolvedEndpoint, SwagenConfig } from "../core/types.ts";
 import { formatDuration } from "../utils/fmt.ts";
+import { logger } from "../utils/logger.ts";
 
 interface RunState {
   spec?: Awaited<ReturnType<typeof loadSpec>>;
@@ -241,8 +242,7 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
           continue;
         }
 
-        if (dry) {
-        } else {
+        if (!dry) {
           mkdirSync(dirname(abs), { recursive: true });
           await Bun.write(abs, file.content); // eslint-disable-line no-await-in-loop
         }
@@ -404,9 +404,13 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
                 count++;
               }
             }
-          } catch {}
+          } catch (e) {
+            logger.warn("search", `Failed to read ${file}: ${e}`);
+          }
         }
-      } catch {}
+      } catch (e) {
+        logger.warn("search", `Glob scan error: ${e}`);
+      }
       if (results.length === 0) return ok({ message: "No matches found.", results: [] });
       return ok({ matchCount: results.length, results });
     },
@@ -458,9 +462,13 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
             if (!isDryRun) {
               await Bun.write(file, replaced);
             }
-          } catch {}
+            } catch (e) {
+              logger.warn("replace", `Failed to process ${file}: ${e}`);
+            }
         }
-      } catch {}
+      } catch (e) {
+        logger.warn("replace", `Glob scan error: ${e}`);
+      }
 
       if (changes.length === 0)
         return ok({ message: "No matches found.", changes: [], dryRun: isDryRun });
