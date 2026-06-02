@@ -55,7 +55,7 @@ function renderTagFile(
     setupImport,
     fixtureImport,
     ``,
-    `const BASE_URL = "${config.baseUrl}";`,
+    `const BASE_URL = ${quoteUrl(config.baseUrl)};`,
     ``,
     config.emitSetup
       ? [
@@ -239,6 +239,10 @@ function groupByTag(endpoints: ResolvedEndpoint[]): Map<string, ResolvedEndpoint
     map.set(tag, [...(map.get(tag) ?? []), ep]);
   }
   return map;
+}
+
+function quoteUrl(url: string): string {
+  return url.includes('"') || url.includes("'") ? url : `"${url}"`;
 }
 
 function indent(s: string, spaces: number): string {
