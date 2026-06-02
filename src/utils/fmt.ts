@@ -192,7 +192,7 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
       if (eqIdx !== -1) {
         const key = arg.slice(2, eqIdx);
         flags[key] = arg.slice(eqIdx + 1);
-        i++;
+        i += 1;
       } else {
         i = consumeFlag(argv, i, arg.slice(2), flags);
       }

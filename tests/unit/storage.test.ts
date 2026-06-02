@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { rmSync, existsSync } from "node:fs";
-import { MemoryStorage, FileStorage, newSession, createStorage } from "../../src/storage.ts";
+import { MemoryStorage, FileStorage, RedisStorage, newSession, createStorage } from "../../src/storage.ts";
 import type { Session } from "../../src/core/types.ts";
 
 function makeSession(id: string): Session {
@@ -161,7 +161,6 @@ describe("RedisStorage", () => {
 
   it("getSession returns null when key not found", async () => {
     mockFetch({ result: null });
-    const { RedisStorage } = await import("../../src/storage.ts");
     store = new RedisStorage("https://mock-redis.example.com", "tok");
     expect(await store.getSession("nope")).toBeNull();
   });
@@ -169,7 +168,6 @@ describe("RedisStorage", () => {
   it("getSession returns parsed session", async () => {
     const session = { id: "abc", specSource: "test.yaml", messages: [], runs: [] };
     mockFetch({ result: JSON.stringify(session) });
-    const { RedisStorage } = await import("../../src/storage.ts");
     store = new RedisStorage("https://mock-redis.example.com", "tok");
     const got = await store.getSession("abc");
     expect(got?.id).toBe("abc");

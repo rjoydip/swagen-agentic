@@ -401,22 +401,26 @@ describe("logger", () => {
   });
 
   it("logs JSON format when LOG_FORMAT=json", () => {
-    process.env["LOG_FORMAT"] = "json";
-    const chunks: string[] = [];
-    const write = process.stderr.write.bind(process.stderr);
-    const mockWrite: any = (c: string) => {
-      chunks.push(c);
-      return true;
-    };
-    process.stderr.write = mockWrite;
-    logger.info("test", "msg", { key: "val" });
-    process.stderr.write = write;
-    const parsed = JSON.parse(chunks.join(""));
-    expect(parsed.level).toBe("info");
-    expect(parsed.context).toBe("test");
-    expect(parsed.message).toBe("msg");
-    expect(parsed.data?.key).toBe("val");
-    delete process.env["LOG_FORMAT"];
+    const origFormat = process.env["LOG_FORMAT"];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    try {
+      process.env["LOG_FORMAT"] = "json";
+      const chunks: string[] = [];
+      process.stderr.write = ((c: string) => {
+        chunks.push(c);
+        return true;
+      }) as typeof process.stderr.write;
+      logger.info("test", "msg", { key: "val" });
+      const parsed = JSON.parse(chunks.join(""));
+      expect(parsed.level).toBe("info");
+      expect(parsed.context).toBe("test");
+      expect(parsed.message).toBe("msg");
+      expect(parsed.data?.key).toBe("val");
+    } finally {
+      process.stderr.write = origWrite;
+      if (origFormat === undefined) delete process.env["LOG_FORMAT"];
+      else process.env["LOG_FORMAT"] = origFormat;
+    }
   });
 
   it("includes data in stderr output", () => {
