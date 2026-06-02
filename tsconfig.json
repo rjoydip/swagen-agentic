@@ -18,6 +18,6 @@
     "noEmit": true,
     "types": ["bun-types"]
   },
-  "include": ["src/**/*", "tests/**/*", "examples/**/*", "skills"],
+  "include": ["src/**/*", "tests/**/*", "examples/**/*", ".swagen/server.ts"],
   "exclude": ["node_modules", "dist"]
 }

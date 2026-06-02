@@ -56,7 +56,7 @@ async function runActionsBot() {
   const config = await resolveConfig({
     outDir: process.env["SWAGEN_OUT_DIR"] ?? "tests/api",
     runner: (process.env["SWAGEN_RUNNER"] ?? "bun") as SwagenConfig["runner"],
-    baseUrl: `"${process.env["API_BASE_URL"] ?? "http://localhost:3000"}"`,
+    baseUrl: `process.env.API_BASE_URL ?? "http://petstore3.swagger.io/api/v3"`,
     dryRun: DRY_RUN,
     aiProvider: process.env["SWAGEN_AI_PROVIDER"] ?? "",
     aiModel: process.env["SWAGEN_AI_MODEL"] ?? "",
