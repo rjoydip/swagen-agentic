@@ -21,6 +21,7 @@ const LEVEL_PAD: Record<LogLevel, string> = {
   error: "ERROR",
 };
 
+// Read per-call to allow mid-process switching (e.g., during tests)
 const isJson = () => process.env["LOG_FORMAT"] === "json";
 
 function log(level: LogLevel, context: string, message: string, data?: unknown): void {

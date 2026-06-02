@@ -449,8 +449,7 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
           if (file.includes("node_modules") || file.includes(".swagen")) continue;
           try {
             const text = await Bun.file(file).text();
-            const flags = "g";
-            const searchPattern = args.regex ? new RegExp(args.pattern, flags) : args.pattern;
+            const searchPattern = args.regex ? new RegExp(args.pattern, "g") : args.pattern;
             const replaced = text.replaceAll(searchPattern as string | RegExp, args.replacement);
             if (replaced === text) continue;
             const diff = (text.match(searchPattern as string | RegExp) ?? []).length;

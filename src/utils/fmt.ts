@@ -167,6 +167,7 @@ function consumeFlag(
   key: string,
   flags: Record<string, string | boolean>,
 ): number {
+  // Returns i + 2 when next arg is consumed as a value, i + 1 for boolean flag
   const next = argv[i + 1];
   if (next !== undefined && !next.startsWith("-")) {
     flags[key] = next;
