@@ -525,7 +525,7 @@ function flagsToConfig(flags: Record<string, string | boolean>): Partial<SwagenC
   if (flags["o"]) c.outDir = flags["o"] as string;
   if (flags["runner"]) c.runner = flags["runner"] as SwagenConfig["runner"];
   if (flags["r"]) c.runner = flags["r"] as SwagenConfig["runner"];
-  if (flags["base-url"]) c.baseUrl = `"${flags["base-url"] as string}"`;
+  if (flags["base-url"]) c.baseUrl = flags["base-url"] as string;
   if (flags["dry-run"]) c.dryRun = true;
   if (flags["include-tags"]) c.includeTags = (flags["include-tags"] as string).split(",");
   if (flags["exclude-tags"]) c.excludeTags = (flags["exclude-tags"] as string).split(",");

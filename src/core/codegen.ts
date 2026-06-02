@@ -55,7 +55,7 @@ function renderTagFile(
     setupImport,
     fixtureImport,
     ``,
-    `const BASE_URL = ${config.baseUrl};`,
+    `const BASE_URL = "${config.baseUrl}";`,
     ``,
     config.emitSetup
       ? [
