@@ -12,3 +12,4 @@ dist/
 !.env.example
 .fallow
 generated-bun-tests/
+tmp/

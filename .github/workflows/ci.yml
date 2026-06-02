@@ -52,7 +52,7 @@ jobs:
       - name: Unit integration tests
         run: bun test tests/integration
       - name: Test Coverage
-        run: bun test --coverage
+        run: bun test --coverage tests/
 
   swagen:
     name: Agentic test generation
