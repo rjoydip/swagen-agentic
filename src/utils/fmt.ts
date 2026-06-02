@@ -161,20 +161,21 @@ export interface ParsedArgs {
  *   --no-flag       → { flag: false }
  *   -f value        → { f: "value" }
  */
+/** Returns the next index to process after consuming the flag at argv[i]. */
 function consumeFlag(
   argv: string[],
   i: number,
   arg: string,
   flags: Record<string, string | boolean>,
 ): number {
-  // Handle --key=value inline (key is extracted from the current arg)
+  // --key=value: value embedded in current arg, advance by 1
   const eqIdx = arg.indexOf("=");
   if (eqIdx !== -1) {
     const key = arg.startsWith("--") ? arg.slice(2, eqIdx) : arg.slice(1, eqIdx);
     flags[key] = arg.slice(eqIdx + 1);
     return i + 1;
   }
-  // Handle --key value or -k value (value is the next argv element)
+  // --key value: value is the next argv element, advance by 2
   const prefixLen = arg.startsWith("--") ? 2 : 1;
   const key = arg.slice(prefixLen);
   const next = argv[i + 1];
@@ -182,7 +183,7 @@ function consumeFlag(
     flags[key] = next;
     return i + 2;
   }
-  // Boolean flag (no value)
+  // Boolean flag: no value consumed, advance by 1
   flags[key] = true;
   return i + 1;
 }

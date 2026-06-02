@@ -167,19 +167,19 @@ async function main() {
     process.exit(0);
   }
 
-  // General help — no command or explicit "help" subcommand
-  if (!command || command === "help") {
-    printHelp(COMMANDS, VERSION);
-    process.exit(0);
-  }
-
-  // --help/-h on any command shows per-command help
-  if (flags["help"] || flags["h"]) {
+  // --help/-h on a specific command → per-command help
+  if ((flags["help"] || flags["h"]) && command) {
     const cmd = COMMAND_MAP.get(command);
     if (cmd) {
       printCommandHelp(cmd, VERSION);
       process.exit(0);
     }
+  }
+
+  // General help — no command, bare "help", or bare --help/-h
+  if (!command || command === "help") {
+    printHelp(COMMANDS, VERSION);
+    process.exit(0);
   }
 
   const config = await resolveConfig(flagsToConfig(flags));
@@ -521,18 +521,18 @@ async function cmdBench(
 
 function flagsToConfig(flags: Record<string, string | boolean>): Partial<SwagenConfig> {
   const c: Partial<SwagenConfig> = {};
-  if (flags["out-dir"]) c.outDir = flags["out-dir"] as string;
-  if (flags["o"]) c.outDir = flags["o"] as string;
-  if (flags["runner"]) c.runner = flags["runner"] as SwagenConfig["runner"];
-  if (flags["r"]) c.runner = flags["r"] as SwagenConfig["runner"];
-  if (flags["base-url"]) c.baseUrl = flags["base-url"] as string;
+  if (typeof flags["out-dir"] === "string") c.outDir = flags["out-dir"];
+  if (typeof flags["o"] === "string") c.outDir = flags["o"];
+  if (typeof flags["runner"] === "string") c.runner = flags["runner"] as SwagenConfig["runner"];
+  if (typeof flags["r"] === "string") c.runner = flags["r"] as SwagenConfig["runner"];
+  if (typeof flags["base-url"] === "string") c.baseUrl = flags["base-url"];
   if (flags["dry-run"]) c.dryRun = true;
-  if (flags["include-tags"]) c.includeTags = (flags["include-tags"] as string).split(",");
-  if (flags["exclude-tags"]) c.excludeTags = (flags["exclude-tags"] as string).split(",");
-  if (flags["skip"]) c.skipOperations = (flags["skip"] as string).split(",");
-  if (flags["provider"]) c.aiProvider = flags["provider"] as string;
-  if (flags["model"]) c.aiModel = flags["model"] as string;
-  if (flags["storage"])
+  if (typeof flags["include-tags"] === "string") c.includeTags = flags["include-tags"].split(",");
+  if (typeof flags["exclude-tags"] === "string") c.excludeTags = flags["exclude-tags"].split(",");
+  if (typeof flags["skip"] === "string") c.skipOperations = flags["skip"].split(",");
+  if (typeof flags["provider"] === "string") c.aiProvider = flags["provider"];
+  if (typeof flags["model"] === "string") c.aiModel = flags["model"];
+  if (typeof flags["storage"] === "string")
     c.storage = { backend: flags["storage"] as SwagenConfig["storage"]["backend"] };
   return c;
 }
