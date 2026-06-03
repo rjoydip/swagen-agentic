@@ -13,3 +13,4 @@ dist/
 .fallow
 generated-bun-tests/
 tmp/
+coverage/

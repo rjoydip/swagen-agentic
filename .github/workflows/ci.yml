@@ -52,7 +52,7 @@ jobs:
       - name: Unit integration tests
         run: bun test tests/integration
       - name: Test Coverage
-        run: bun test --coverage tests/
+        run: bun test --coverage --coverage-reporter=text --coverage-reporter=lcov tests/
       - uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
