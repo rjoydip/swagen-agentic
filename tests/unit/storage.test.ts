@@ -5,7 +5,13 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { rmSync, existsSync } from "node:fs";
-import { MemoryStorage, FileStorage, RedisStorage, newSession, createStorage } from "../../src/storage.ts";
+import {
+  MemoryStorage,
+  FileStorage,
+  RedisStorage,
+  newSession,
+  createStorage,
+} from "../../src/storage.ts";
 import type { Session } from "../../src/core/types.ts";
 
 function makeSession(id: string): Session {

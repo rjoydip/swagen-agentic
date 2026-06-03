@@ -389,7 +389,12 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
         pathPattern,
         maxResults = 20,
         caseSensitive = false,
-      } = params as { pattern: string; pathPattern?: string; maxResults?: number; caseSensitive?: boolean };
+      } = params as {
+        pattern: string;
+        pathPattern?: string;
+        maxResults?: number;
+        caseSensitive?: boolean;
+      };
       const results: Array<{ file: string; line: number; content: string }> = [];
       const glob = new Bun.Glob(pathPattern ?? "**/*.{ts,js,mjs,yaml,yml,json}");
       let count = 0;
@@ -441,7 +446,10 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
         Type.Boolean({ description: "Preview changes without writing. Default true." }),
       ),
       caseSensitive: Type.Optional(
-        Type.Boolean({ description: "Case-sensitive match. Default true (case-sensitive). Only applies in regex mode; string mode is always case-sensitive." }),
+        Type.Boolean({
+          description:
+            "Case-sensitive match. Default true (case-sensitive). Only applies in regex mode; string mode is always case-sensitive.",
+        }),
       ),
     }),
     async execute(_id: string, params: unknown) {
@@ -472,9 +480,9 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
             if (!isDryRun) {
               await Bun.write(file, replaced);
             }
-            } catch (e) {
-              logger.warn("replace", `Failed to process ${file}: ${e}`);
-            }
+          } catch (e) {
+            logger.warn("replace", `Failed to process ${file}: ${e}`);
+          }
         }
       } catch (e) {
         logger.warn("replace", `Glob scan error: ${e}`);

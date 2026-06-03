@@ -11,6 +11,28 @@ Standalone `SKILL.md` files that work with any AI coding agent (Cursor, Claude C
 | gRPC API    | `skills/grpc/SKILL.md`    |
 | SOAP API    | `skills/soap/SKILL.md`    |
 
+## Universal install (all agents)
+
+The [open agent skills CLI](https://npmx.dev/package/skills) (`npx skills`) installs skills into **70+ coding agents** with a single command:
+
+```bash
+npx skills add rjoydip/swagen-agentic --all
+```
+
+Target specific agents:
+
+```bash
+npx skills add rjoydip/swagen-agentic --all -a claude-code -a opencode -a cursor
+```
+
+Install only specific skills:
+
+```bash
+npx skills add rjoydip/swagen-agentic --skill rest-api --skill graphql-api -a '*'
+```
+
+See the [skills CLI docs](https://npmx.dev/package/skills) for all options (scoping, non-interactive, listing, etc.).
+
 ## Tool-specific setup
 
 ### Cursor
