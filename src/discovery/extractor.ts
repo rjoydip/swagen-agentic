@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { SourceEntity } from "../core/types.ts";
+import { countNewlines } from "../utils/fmt.ts";
 
 export function extractEntities(filePath: string, content?: string): SourceEntity[] {
   const code = content ?? readFileSync(filePath, "utf-8");
@@ -205,7 +206,7 @@ function extractSignature(lines: string[], lineIndex: number): string {
     .slice(start, end)
     .map((l) => (l ?? "").trim())
     .join(" ")
-    .slice(0, 200);
+    .slice(0, 600);
 }
 
 function extractClassSignature(lines: string[], lineIndex: number): string {
@@ -215,7 +216,7 @@ function extractClassSignature(lines: string[], lineIndex: number): string {
     .slice(start, end)
     .map((l) => (l ?? "").trim())
     .join(" ")
-    .slice(0, 200);
+    .slice(0, 600);
 }
 
 function extractArrowSignature(lines: string[], lineIndex: number): string {
@@ -225,7 +226,7 @@ function extractArrowSignature(lines: string[], lineIndex: number): string {
     .slice(start, end)
     .map((l) => (l ?? "").trim())
     .join(" ")
-    .slice(0, 200);
+    .slice(0, 600);
 }
 
 function findNextNonBlankLine(lines: string[], from: number): number | null {
@@ -234,13 +235,4 @@ function findNextNonBlankLine(lines: string[], from: number): number | null {
     if (ln && ln.trim()) return i;
   }
   return null;
-}
-
-function countNewlines(s: string, upTo: number): number {
-  let count = 0;
-  for (let i = 0; i < upTo && i < s.length; i++) {
-    const ch = s[i];
-    if (ch === "\n") count++;
-  }
-  return count;
 }

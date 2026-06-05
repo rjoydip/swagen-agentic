@@ -25,7 +25,11 @@ import { generateTestFiles } from "./core/codegen.ts";
 import { splitAndGenerate } from "./orchestrator.ts";
 import type { HarnessRunResult } from "./harness.ts";
 import type { SwagenConfig } from "./core/types.ts";
-import { buildGeneratePrompt, buildValidatePrompt } from "./core/prompts.ts";
+import {
+  buildGeneratePrompt,
+  buildValidatePrompt,
+  buildCodebaseGeneratePrompt,
+} from "./core/prompts.ts";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 
@@ -638,17 +642,7 @@ async function cmdCodebaseGenerate(config: SwagenConfig, andRun: boolean) {
   const spinner = createSpinner("Agent is analyzing codebase...");
   const startTime = Date.now();
 
-  const prompt = [
-    `Generate tests for the existing codebase.`,
-    `Mode: codebase`,
-    `Discovery path: ${config.discoveryPath}`,
-    `Runner: ${config.runner}`,
-    `Output: ${config.outDir}`,
-    config.augment ? `Strategy: ${config.augmentStrategy} augmentation` : "",
-    andRun ? "After writing files, run the tests and report results." : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const prompt = buildCodebaseGeneratePrompt(config, andRun);
 
   try {
     const gen = harness.run({ prompt, persist: !config.dryRun });

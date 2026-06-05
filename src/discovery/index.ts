@@ -53,7 +53,7 @@ export function discoverCodebase(options: DiscoveryOptions = {}): CodebaseAnalys
   for (const sf of sourceFiles) {
     try {
       const content = fileReader(sf.absPath);
-      const routes = detectRoutePatterns(content);
+      const routes = detectRoutePatterns(content, sf.path);
       for (const route of routes) {
         const existing = allEntities.find((e) => e.file === sf.path && e.line === route.line);
         if (existing) {

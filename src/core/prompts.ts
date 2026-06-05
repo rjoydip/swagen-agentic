@@ -239,8 +239,8 @@ Rules:
 - Do not duplicate existing tests — check coverage first
 - Every test file is automatically formatted and deduplicated after writing`;
 
-export function buildCodebaseGeneratePrompt(config: SwagenConfig): string {
-  return [
+export function buildCodebaseGeneratePrompt(config: SwagenConfig, andRun?: boolean): string {
+  const lines = [
     `Generate tests for the existing codebase.`,
     `Discovery path: ${config.discoveryPath}`,
     `Runner: ${config.runner}`,
@@ -249,7 +249,9 @@ export function buildCodebaseGeneratePrompt(config: SwagenConfig): string {
       ? `Augmentation strategy: ${config.augmentStrategy}`
       : "Generate standalone test files.",
     `Coverage threshold: ${(config.coverageThreshold * 100).toFixed(0)}%`,
-  ].join("\n");
+  ];
+  if (andRun) lines.push("After writing files, run the tests and report results.");
+  return lines.join("\n");
 }
 
 export function buildAugmentPrompt(

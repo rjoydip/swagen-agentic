@@ -30,6 +30,7 @@ interface RunState {
   endpoints?: ResolvedEndpoint[];
   generatedFiles?: GeneratedFile[];
   codebaseAnalysis?: CodebaseAnalysis;
+  testFilePaths?: string[];
 }
 
 type ToolResult = {
@@ -49,15 +50,17 @@ function err(message: string): ToolResult {
 }
 
 function enrichWithCoverage(state: RunState): string[] {
-  const allFiles = walkFiles(process.cwd(), { maxDepth: 8 });
-  const testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
+  if (!state.testFilePaths) {
+    const allFiles = walkFiles(process.cwd(), { maxDepth: 8 });
+    state.testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
+  }
   const enriched = enrichAnalysisWithCoverage(
     state.codebaseAnalysis!,
-    testFilePaths,
+    state.testFilePaths,
     process.cwd(),
   );
   state.codebaseAnalysis = enriched;
-  return testFilePaths;
+  return state.testFilePaths;
 }
 
 export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any, any>[] {

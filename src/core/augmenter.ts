@@ -48,6 +48,11 @@ export function parseTestStructure(content: string): TestFileStructure {
     if (line === undefined) continue;
     const trimmed = line.trim();
 
+    // Reset currentDescribe when we've passed its end line
+    if (currentDescribe && i >= currentDescribe.endLine) {
+      currentDescribe = null;
+    }
+
     // Collect import lines
     if (trimmed.startsWith("import ")) {
       importLines.push(trimmed);
@@ -125,7 +130,7 @@ export function analyzeTestPatterns(files: string[]): TestFileStructure["convent
   let runner: "bun" | "vitest" = "bun";
   let usesDescribe = false;
   let usesAsyncAwait = false;
-  let assertionStyle: "expect" | "assert" | "should" = "expect";
+  const styleCounts: Record<string, number> = { expect: 0, assert: 0, should: 0 };
 
   for (const file of files) {
     try {
@@ -134,11 +139,16 @@ export function analyzeTestPatterns(files: string[]): TestFileStructure["convent
       if (structure.conventions.runner === "vitest") runner = "vitest";
       if (structure.conventions.usesDescribe) usesDescribe = true;
       if (structure.conventions.usesAsyncAwait) usesAsyncAwait = true;
-      assertionStyle = structure.conventions.assertionStyle;
+      styleCounts[structure.conventions.assertionStyle] =
+        (styleCounts[structure.conventions.assertionStyle] ?? 0) + 1;
     } catch {
       // skip
     }
   }
+
+  // Majority voting for assertion style
+  const assertionStyle = (Object.entries(styleCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ??
+    "expect") as "expect" | "assert" | "should";
 
   return { runner, usesDescribe, usesAsyncAwait, assertionStyle };
 }
@@ -153,15 +163,13 @@ export function generateUnitTests(
   const byFile = groupEntitiesByFile(entities);
   const files: GeneratedFile[] = [];
 
-  for (const [filePath, fileEntities] of byFile) {
-    const importPath = filePath.replace(/\.(ts|js)$/, ".js");
-    const testPath = filePath.replace(/\.(ts|js)$/, ".test.ts");
+  const EXT_RE = /\.(tsx?|mts|jsx?|mjs|cjs)$/;
 
-    const testName =
-      filePath
-        .split("/")
-        .pop()
-        ?.replace(/\.(ts|js)$/, "") ?? "unknown";
+  for (const [filePath, fileEntities] of byFile) {
+    const importPath = filePath.replace(EXT_RE, ".js");
+    const testPath = filePath.replace(EXT_RE, ".test.ts");
+
+    const testName = filePath.split("/").pop()?.replace(EXT_RE, "") ?? "unknown";
     const importLine =
       conventions.runner === "vitest"
         ? `import { describe, it, expect } from "vitest";`
@@ -202,7 +210,11 @@ export function generateUnitTests(
 function buildEntityImport(entity: SourceEntity, importPath: string): string[] {
   const imports: string[] = [];
   // Add main import for the entity
-  imports.push(`import { ${entity.name} } from "${importPath}";`);
+  if (entity.visibility === "default") {
+    imports.push(`import ${entity.name} from "${importPath}";`);
+  } else {
+    imports.push(`import { ${entity.name} } from "${importPath}";`);
+  }
 
   // Add imports for types/interfaces referenced
   const typeMatch = entity.signature?.match(/: (\w+)/g);
@@ -232,7 +244,9 @@ function buildTestCases(
 
     // Error case
     tests.push(`it("should handle errors from ${entity.name}", async () => {`);
-    tests.push(`  ${conventions.assertionStyle === "assert" ? "" : "expect.assertions(1);"}`);
+    tests.push(
+      `  ${conventions.assertionStyle === "assert" ? "// expect.assertions not needed with assert" : "expect.assertions(1);"}`,
+    );
     tests.push(`  try {`);
     tests.push(`    await ${entity.name}();`);
     tests.push(`  } catch (error) {`);
@@ -315,6 +329,10 @@ function smartMergeContent(existing: string, generated: string): string {
   const genStructure = parseTestStructure(generated);
   const existingStructure = parseTestStructure(existing);
 
+  // Track cumulative line offset after each splice to keep indices valid
+  let lineOffset = 0;
+  const indentSize = detectIndent(existing);
+
   for (const genBlock of genStructure.blocks) {
     if (genBlock.type === "describe") {
       const matchingBlock = existingStructure.blocks.find(
@@ -326,13 +344,14 @@ function smartMergeContent(existing: string, generated: string): string {
         const newTests = genBlock.children.filter((c) => !childNames.has(normalizeName(c.name)));
         if (newTests.length > 0) {
           // Find insertion point (just before closing of describe)
-          const insertLine = matchingBlock.endLine - 2;
+          const insertLine = matchingBlock.endLine - 2 + lineOffset;
           const generatedLines = generated.split("\n");
           const newLines = newTests.map((t) => {
             const testLines = generatedLines.slice(t.startLine - 1, t.endLine);
             return testLines.join("\n");
           });
-          existingLines.splice(insertLine, 0, ...newLines.map((l) => indentLine(l, 2)));
+          existingLines.splice(insertLine, 0, ...newLines.map((l) => indentLine(l, indentSize)));
+          lineOffset += newLines.length;
         }
       } else {
         // No matching describe — append the whole block
@@ -342,6 +361,7 @@ function smartMergeContent(existing: string, generated: string): string {
             : [];
         if (genLines.length > 0) {
           existingLines.push("", ...genLines);
+          // push doesn't affect earlier splice positions, no offset needed
         }
       }
     }
@@ -365,10 +385,23 @@ function groupEntitiesByFile(entities: SourceEntity[]): Map<string, SourceEntity
 function findBlockEnd(lines: string[], start: number): number {
   let depth = 0;
   let foundOpen = false;
+  let inString: string | null = null;
   for (let i = start; i < lines.length; i++) {
     const line = lines[i];
     if (line === undefined) continue;
-    for (const ch of line) {
+    for (let ci = 0; ci < line.length; ci++) {
+      const ch = line[ci];
+      const prev = ci > 0 ? line[ci - 1] : "";
+      // Toggle string state (skip escaped quotes)
+      if (!inString && (ch === '"' || ch === "'" || ch === "`") && prev !== "\\") {
+        inString = ch;
+        continue;
+      }
+      if (inString === ch && prev !== "\\") {
+        inString = null;
+        continue;
+      }
+      if (inString) continue;
       if (ch === "{") {
         depth++;
         foundOpen = true;
@@ -381,6 +414,12 @@ function findBlockEnd(lines: string[], start: number): number {
 
 function normalizeName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function detectIndent(existing: string): number {
+  const match = existing.match(/^(  |> )/m);
+  if (match) return match[1]!.length;
+  return 2;
 }
 
 function indentLine(line: string, spaces: number): string {

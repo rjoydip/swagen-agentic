@@ -21,11 +21,14 @@ export function generateCoverageReport(
   testFiles: string[],
   baseDir: string,
 ): string {
-  const gaps = scanCoverage({
-    sourceEntities: analysis.entities,
-    testFiles,
-    baseDir,
-  });
+  const gaps =
+    analysis.coverageGaps.length > 0
+      ? analysis.coverageGaps
+      : scanCoverage({
+          sourceEntities: analysis.entities,
+          testFiles,
+          baseDir,
+        });
   const report = buildCoverageReport(gaps, analysis.entities.length);
   return formatCoverageReport(report);
 }

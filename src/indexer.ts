@@ -56,7 +56,7 @@ export async function buildIndex(cwd = process.cwd()): Promise<CodebaseIndex> {
           for (const e of ents) {
             entities.push({ name: e.name, type: e.type, file: f.path, line: e.line });
           }
-          const routes = detectRoutePatterns(content);
+          const routes = detectRoutePatterns(content, f.path);
           for (const r of routes) {
             apiEndpoints.push({ name: r.method, method: r.method, path: r.path });
           }

@@ -47,7 +47,8 @@ export function formatCoverageReport(
   ];
 
   if (showGaps && report.gaps.length > 0) {
-    const priorityGaps = report.gaps.filter((g) => g.coverage !== "full");
+    // scanCoverage already excludes "full" gaps, filter is for safety
+    const priorityGaps = report.gaps;
     if (priorityGaps.length > 0) {
       lines.push("", "### Priority Gaps (uncovered or low)");
       for (const gap of priorityGaps.slice(0, gapLimit)) {

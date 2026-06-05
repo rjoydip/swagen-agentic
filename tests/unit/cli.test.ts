@@ -204,4 +204,33 @@ describe("CLI commands", () => {
     const record = await getLastRun();
     expect(record === null || typeof record === "object").toBe(true);
   });
+
+  it("swagen generate --existing parses without error", () => {
+    const { parseArgs: parse } = require("../../src/utils/fmt.js");
+    // --existing must precede another flag to stay boolean (parser consumes next non-flag arg as value)
+    const r = parse(["generate", "src/", "--existing", "--dry-run"]);
+    expect(r.command).toBe("generate");
+    expect(r.flags["existing"]).toBe(true);
+    expect(r.flags["dry-run"]).toBe(true);
+    expect(r.positionals).toEqual(["src/"]);
+  });
+
+  it("swagen generate --existing src/ with provider flags is parseable", () => {
+    const { parseArgs: parse } = require("../../src/utils/fmt.js");
+    const r = parse([
+      "generate",
+      "src/",
+      "--existing",
+      "--dry-run",
+      "--provider",
+      "anthropic",
+      "--model",
+      "claude-opus-4-5-20251101",
+    ]);
+    expect(r.flags["existing"]).toBe(true);
+    expect(r.flags["dry-run"]).toBe(true);
+    expect(r.flags["provider"]).toBe("anthropic");
+    expect(r.flags["model"]).toBe("claude-opus-4-5-20251101");
+    expect(r.positionals[0]).toBe("src/");
+  });
 });

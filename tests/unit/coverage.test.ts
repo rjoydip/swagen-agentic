@@ -1,11 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { scanCoverage } from "../../src/coverage/scanner.ts";
+import { scanCoverage, analyzeCoverage, generateCoverageReport } from "../../src/coverage/index.ts";
 import {
   buildCoverageReport,
   formatCoverageReport,
   groupGapsByFile,
 } from "../../src/coverage/reporter.ts";
-import type { SourceEntity } from "../../src/core/types.ts";
+import type { SourceEntity, CodebaseAnalysis } from "../../src/core/types.ts";
 
 function makeEntity(overrides: Partial<SourceEntity>): SourceEntity {
   return {
@@ -121,5 +121,45 @@ describe("groupGapsByFile", () => {
     expect(byFile.size).toBe(2);
     expect(byFile.get("src/a.ts")?.length).toBe(2);
     expect(byFile.get("src/b.ts")?.length).toBe(1);
+  });
+});
+
+describe("coverage/index barrel", () => {
+  it("analyzeCoverage delegates to scanCoverage", () => {
+    const entities = [makeEntity({ name: "fn" })];
+    const gaps = analyzeCoverage({ sourceEntities: entities, testFiles: [], baseDir: "/tmp" });
+    expect(gaps.length).toBe(1);
+    expect(gaps[0]!.coverage).toBe("none");
+  });
+
+  it("generateCoverageReport uses pre-computed gaps when available", () => {
+    const entity = makeEntity({ name: "fn" });
+    const analysis: CodebaseAnalysis = {
+      entities: [entity],
+      dependencies: [],
+      coverageGaps: [
+        { entity, coverage: "none" as const, gapDescription: "no tests", existingTests: [] },
+      ],
+      entryPoints: [],
+      apiEndpoints: [],
+      framework: "unknown",
+    };
+    const report = generateCoverageReport(analysis, [], "/tmp");
+    expect(report).toContain("Coverage Report");
+    expect(report).toContain("fn");
+  });
+
+  it("generateCoverageReport re-scans when gaps empty", () => {
+    const entity = makeEntity({ name: "newFn" });
+    const analysis: CodebaseAnalysis = {
+      entities: [entity],
+      dependencies: [],
+      coverageGaps: [],
+      entryPoints: [],
+      apiEndpoints: [],
+      framework: "unknown",
+    };
+    const report = generateCoverageReport(analysis, [], "/tmp");
+    expect(report).toContain("Coverage Report");
   });
 });

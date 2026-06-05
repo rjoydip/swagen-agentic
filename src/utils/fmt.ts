@@ -301,3 +301,11 @@ export function formatDuration(ms: number): string {
 export function hr(char = "─", width = 64): string {
   return char.repeat(width);
 }
+
+export function countNewlines(s: string, upTo: number): number {
+  let count = 0;
+  for (let i = 0; i < upTo && i < s.length; i++) {
+    if (s[i] === "\n") count++;
+  }
+  return count;
+}

@@ -1,4 +1,5 @@
 import type { ApiFramework } from "../core/types.ts";
+import { countNewlines } from "../utils/fmt.ts";
 
 interface FrameworkPattern {
   name: ApiFramework;
@@ -92,6 +93,7 @@ export function detectFramework(files: string[], readFile: (p: string) => string
 
 export function detectRoutePatterns(
   content: string,
+  filePath?: string,
 ): Array<{ method: string; path: string; line: number }> {
   const routes: Array<{ method: string; path: string; line: number }> = [];
 
@@ -104,6 +106,23 @@ export function detectRoutePatterns(
     const path = match[2] ?? "/";
     const line = countNewlines(content, match.index) + 1;
     routes.push({ method: method.toUpperCase(), path, line });
+  }
+
+  // node:http switch-case routing: switch(req.method) { case "GET": ...
+  const nodeSwitchRe =
+    /switch\s*\(\s*(?:req\.method)\s*\)\s*\{[.\s\S]*?case\s+["'`](GET|POST|PUT|PATCH|DELETE)["'`]/g;
+  while ((match = nodeSwitchRe.exec(content)) !== null) {
+    const method = match[1] ?? "GET";
+    const line = countNewlines(content, match.index) + 1;
+    routes.push({ method, path: "/(inferred)", line });
+  }
+
+  // node:http object-lookup routing: const routes = { GET: handler, POST: handler }
+  const nodeMapRe = /(?:const|let|var)\s+\w+\s*=\s*\{\s*(?:\s*(GET|POST|PUT|PATCH|DELETE)\s*:)/g;
+  while ((match = nodeMapRe.exec(content)) !== null) {
+    const method = match[1] ?? "GET";
+    const line = countNewlines(content, match.index) + 1;
+    routes.push({ method, path: "/(inferred)", line });
   }
 
   // NestJS: @Get('path')
@@ -120,7 +139,8 @@ export function detectRoutePatterns(
   while ((match = nextRe.exec(content)) !== null) {
     const method = match[1] ?? "GET";
     const line = countNewlines(content, match.index) + 1;
-    routes.push({ method, path: "/(inferred-from-file)", line });
+    const path = filePath ? inferNextJSPath(filePath) : "/(inferred-from-file)";
+    routes.push({ method, path, line });
   }
 
   // node:http: createServer((req, res) => { ... })
@@ -135,11 +155,28 @@ export function detectRoutePatterns(
   return routes;
 }
 
-function countNewlines(s: string, upTo: number): number {
-  let count = 0;
-  for (let i = 0; i < upTo && i < s.length; i++) {
-    const ch = s[i];
-    if (ch === "\n") count++;
-  }
-  return count;
+function inferNextJSPath(filePath: string): string {
+  // Normalize to forward slashes and strip cwd
+  const normalized = filePath.replace(/\\/g, "/");
+  const stripped = normalized.replace(/^.*?(?=\/(?:app|pages)\/)/, "");
+
+  // Pages Router: pages/api/users.ts → /api/users
+  let path = stripped
+    .replace(/^\/pages\//, "/")
+    .replace(/^\/app\//, "/")
+    // Remove file extension
+    .replace(/\.(tsx?|jsx?)$/, "")
+    // Remove route group markers: (group) → ""
+    .replace(/\/?\([^)]+\)/g, "")
+    // Remove catch-all segments: [...slug] → ""
+    .replace(/\/\[\.\.\.[^\]]+\]/g, "")
+    // Dynamic params: [id] → :id
+    .replace(/\[([^\]]+)\]/g, ":$1")
+    // Remove trailing /route or /page
+    .replace(/\/(route|page)$/, "")
+    // Remove trailing index
+    .replace(/\/index$/, "");
+
+  if (!path) path = "/";
+  return path;
 }

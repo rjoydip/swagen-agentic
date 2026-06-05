@@ -1,6 +1,7 @@
-import { existsSync, readdirSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { ApiFramework } from "./core/types.ts";
+import { walkFiles, isTestFile, isSourceFile } from "./discovery/walker.ts";
 
 export interface ProjectContext {
   testRunner: "bun" | "vitest" | "jest" | "unknown";
@@ -94,13 +95,10 @@ export async function detectContext(cwd = process.cwd()): Promise<ProjectContext
   // Also walk src directory for patterns to detect framework
   if (ctx.apiFrameworks.length === 0) {
     try {
-      const entries = readdirSync(join(cwd, "src"), { withFileTypes: true });
-      const files = entries
-        .filter((e) => !e.isDirectory() && e.name.match(/\.(ts|js)$/))
-        .map((e) => join(cwd, "src", e.name));
-      for (const file of files.slice(0, 10)) {
+      const all = walkFiles(join(cwd, "src"), { maxDepth: 4 });
+      for (const entry of all.slice(0, 10)) {
         // eslint-disable-next-line no-await-in-loop
-        const content = await Bun.file(file).text();
+        const content = await Bun.file(entry.absPath).text();
         if (content.includes("@Controller(") || content.includes("@Module(")) {
           ctx.apiFrameworks.push("nestjs");
           break;
@@ -112,24 +110,20 @@ export async function detectContext(cwd = process.cwd()): Promise<ProjectContext
     } catch {}
   }
 
-  // Find specs and test files via lightweight walk
+  // Find specs and test files via walkFiles
   try {
-    const entries = readdirSync(cwd, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.name.startsWith(".") || e.name === "node_modules") continue;
-      const abs = join(cwd, e.name);
-      if (e.isDirectory()) {
-        ctx.sourceFiles += scanDirCount(abs, /\.(ts|js|mjs)$/);
-        ctx.testFiles += scanDirCount(abs, /\.(test|spec)\.(ts|js|mjs)$/);
-        ctx.existingTestFiles.push(...scanDir(abs, /\.(test|spec)\.(ts|js|mjs)$/, cwd));
-      } else {
-        if (e.name.match(/\.(test|spec)\.(ts|js|mjs)$/)) ctx.existingTestFiles.push(e.name);
-        if (
-          e.name.match(/^.*\.(yaml|json)$/) &&
-          (e.name.startsWith("openapi") || e.name.startsWith("swagger"))
-        ) {
-          ctx.specs.push(e.name);
-        }
+    const all = walkFiles(cwd, { maxDepth: 6 });
+    for (const entry of all) {
+      if (isSourceFile(entry.path)) ctx.sourceFiles++;
+      if (isTestFile(entry.path)) {
+        ctx.testFiles++;
+        ctx.existingTestFiles.push(entry.path);
+      }
+      if (
+        entry.path.match(/^.*\.(yaml|json)$/) &&
+        (entry.path.startsWith("openapi") || entry.path.startsWith("swagger"))
+      ) {
+        ctx.specs.push(entry.path);
       }
     }
   } catch {}
@@ -188,34 +182,4 @@ export function contextPrompt(ctx: ProjectContext): string {
   }
 
   return lines.join("\n");
-}
-
-function scanDirCount(dir: string, filter: RegExp): number {
-  try {
-    let count = 0;
-    const entries = readdirSync(dir, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.name.startsWith(".")) continue;
-      const abs = join(dir, e.name);
-      if (e.isDirectory()) count += scanDirCount(abs, filter);
-      else if (filter.test(e.name)) count++;
-    }
-    return count;
-  } catch {
-    return 0;
-  }
-}
-
-function scanDir(dir: string, filter: RegExp, base: string): string[] {
-  const results: string[] = [];
-  try {
-    const entries = readdirSync(dir, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.name.startsWith(".") || e.name === "node_modules") continue;
-      const abs = join(dir, e.name);
-      if (e.isDirectory()) results.push(...scanDir(abs, filter, base));
-      else if (filter.test(e.name)) results.push(relative(base, abs));
-    }
-  } catch {}
-  return results;
 }
