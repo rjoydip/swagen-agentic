@@ -24,7 +24,7 @@ describe("createTools", () => {
   it("returns exactly 16 tools", () => {
     const cache = new MemoryCache();
     const tools = createTools(makeConfig(), cache);
-    expect(tools.length).toBe(16);
+    expect(tools.length).toBe(17);
   });
 
   it("each tool has name, label, description, parameters, execute", () => {
@@ -66,6 +66,7 @@ describe("createTools", () => {
     expect(names).toContain("check_coverage");
     expect(names).toContain("read_existing_tests");
     expect(names).toContain("augment_tests");
+    expect(names).toContain("task_complete");
   });
 
   it("cache_stats tool returns zero stats before any use", async () => {
