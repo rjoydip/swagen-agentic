@@ -627,15 +627,15 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
     description:
       "Scan existing test files against discovered source entities. Returns coverage gaps: untested, low coverage, or partial coverage.",
     parameters: Type.Object({
-      minGapLevel: Type.Optional(
+      maxGapLevel: Type.Optional(
         Type.Union([Type.Literal("none"), Type.Literal("low"), Type.Literal("partial")], {
-          description: "Minimum gap level to report. Default: none.",
+          description: "Maximum gap level to report. Default: partial (all gaps except full).",
         }),
       ),
     }),
     async execute(_id: string, params: unknown) {
-      const { minGapLevel = "none" } = params as {
-        minGapLevel?: "none" | "low" | "partial";
+      const { maxGapLevel = "partial" } = params as {
+        maxGapLevel?: "none" | "low" | "partial";
       };
       if (!state.codebaseAnalysis) {
         state.codebaseAnalysis = discoverCodebase();
@@ -646,7 +646,7 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
       const testFilePaths = enrichWithCoverage(state);
 
       const filteredGaps = state.codebaseAnalysis.coverageGaps.filter(
-        (g) => (gapLevels[g.coverage] ?? 0) <= (gapLevels[minGapLevel] ?? 0),
+        (g) => (gapLevels[g.coverage] ?? 0) <= (gapLevels[maxGapLevel] ?? 2),
       );
 
       const report = generateCoverageReport(state.codebaseAnalysis, testFilePaths, process.cwd(), {
@@ -796,8 +796,8 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
       // Generate unit tests for target entities
       const generatedFiles = generateUnitTests(targetEntities, config, conventions);
 
-      // Merge with existing test files
-      const mergedFiles = mergeTestFiles(generatedFiles, config.outDir, strategy);
+      // Merge with existing test files (relativePath already includes outDir)
+      const mergedFiles = mergeTestFiles(generatedFiles, process.cwd(), strategy);
 
       state.generatedFiles = mergedFiles;
 

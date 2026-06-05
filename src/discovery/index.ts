@@ -35,7 +35,7 @@ export function discoverCodebase(options: DiscoveryOptions = {}): CodebaseAnalys
 
   for (const sf of sourceFiles) {
     try {
-      const entities = extractEntities(sf.absPath);
+      const entities = extractEntities(sf.absPath, sf.path);
       allEntities.push(...entities);
     } catch {
       // skip unreadable files

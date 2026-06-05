@@ -562,6 +562,7 @@ async function cmdDiscover(dir: string | undefined) {
 
 async function cmdCoverage(dir: string | undefined) {
   const { discoverCodebase } = await import("./discovery/index.ts");
+  const { walkFiles, isTestFile } = await import("./discovery/walker.ts");
   const { generateCoverageReport, enrichAnalysisWithCoverage } =
     await import("./coverage/index.ts");
 
@@ -569,7 +570,11 @@ async function cmdCoverage(dir: string | undefined) {
   const spinner = createSpinner(`Analyzing coverage in ${cwd}...`);
   try {
     const analysis = discoverCodebase({ ...(dir ? { discoveryPath: dir } : {}) });
-    const testFilePaths = analysis.testFilePaths ?? [];
+    let testFilePaths = analysis.testFilePaths ?? [];
+    if (testFilePaths.length === 0) {
+      const allFiles = walkFiles(cwd, { maxDepth: 8 });
+      testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
+    }
     const enriched = enrichAnalysisWithCoverage(analysis, testFilePaths, cwd);
     const report = generateCoverageReport(enriched, testFilePaths, cwd);
     spinner.succeed(
@@ -592,11 +597,16 @@ async function cmdAnalyze(entity: string | undefined) {
 
   const { discoverCodebase } = await import("./discovery/index.ts");
   const { enrichAnalysisWithCoverage } = await import("./coverage/index.ts");
+  const { walkFiles, isTestFile } = await import("./discovery/walker.ts");
 
   const spinner = createSpinner(`Analyzing entity "${entity}"...`);
   try {
     const analysis = discoverCodebase();
-    const testFilePaths = analysis.testFilePaths ?? [];
+    let testFilePaths = analysis.testFilePaths ?? [];
+    if (testFilePaths.length === 0) {
+      const allFiles = walkFiles(process.cwd(), { maxDepth: 8 });
+      testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
+    }
     const enriched = enrichAnalysisWithCoverage(analysis, testFilePaths, process.cwd());
 
     const candidates = enriched.entities.filter(
@@ -655,7 +665,19 @@ async function cmdCodebaseGenerate(config: SwagenConfig, andRun: boolean) {
       // eslint-disable-next-line no-await-in-loop
       result = await gen.next();
     } while (!result.done);
+    const runResult = result.value as HarnessRunResult;
+
     spinner.succeed(`Done in ${formatDuration(Date.now() - startTime)}`);
+
+    // Show generated file summary
+    if (runResult.generatedFileContents.length > 0) {
+      process.stdout.write("\n" + ansi.bold("Generated files:") + "\n");
+      for (const f of runResult.generatedFileContents) {
+        process.stdout.write(ansi.gray(`  ${f.path}`) + ansi.gray(` (${f.tests} tests)\n`));
+      }
+      process.stdout.write("\n");
+    }
+
     showCacheStats(harness);
   } catch (err) {
     spinner.fail(friendlyError(err));

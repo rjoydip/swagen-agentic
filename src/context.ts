@@ -104,7 +104,7 @@ export async function detectContext(cwd = process.cwd()): Promise<ProjectContext
           break;
         }
         if (content.includes("Router()") || content.includes("app.get(")) {
-          ctx.apiFrameworks.push("express");
+          if (!ctx.apiFrameworks.includes("express")) ctx.apiFrameworks.push("express");
         }
       }
     } catch {}

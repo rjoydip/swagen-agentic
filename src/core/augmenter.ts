@@ -264,8 +264,9 @@ function buildEntityImport(entity: SourceEntity, importPath: string): string[] {
   }
 
   // Extract types from signature — restrict to declaration only (before body brace)
+  // Use paren-depth tracking to skip destructuring braces inside parameter lists
   const sig = entity.signature ?? "";
-  const sigHead = sig.split("{")[0] ?? "";
+  const sigHead = extractSigHead(sig);
   const typeMatch = sigHead.match(/: (\w+)/g);
   const genericMatch = sigHead.match(/<(\w+)>/g);
   const allTypeCandidates = [
@@ -275,7 +276,9 @@ function buildEntityImport(entity: SourceEntity, importPath: string): string[] {
   if (allTypeCandidates.length > 0) {
     const types = [
       ...new Set(
-        allTypeCandidates.filter((t) => !BUILT_IN_TYPES.has(t) && t[0]?.toUpperCase() === t[0]),
+        allTypeCandidates.filter(
+          (t) => !BUILT_IN_TYPES.has(t) && t[0]?.toUpperCase() === t[0] && !/^[A-Z]$/.test(t), // skip single-letter generic params (T, K, V, etc.)
+        ),
       ),
     ];
     if (types.length > 0) {
@@ -362,7 +365,24 @@ export function mergeTestFiles(
       case "separate": {
         // Create a separate augmentation file
         const augPath = gen.relativePath.replace(/\.test\.ts$/, ".augment.test.ts");
-        results.push({ ...gen, relativePath: augPath });
+        const augAbsPath = isAbsolute(existingDir)
+          ? join(existingDir, augPath)
+          : join(process.cwd(), existingDir, augPath);
+        const existingAugContent = existsSync(augAbsPath)
+          ? readFileSync(augAbsPath, "utf-8")
+          : null;
+        if (existingAugContent) {
+          // Augment file exists — merge new tests into it (append-style)
+          const merged = existingAugContent.trimEnd() + "\n\n" + gen.content;
+          results.push({
+            ...gen,
+            relativePath: augPath,
+            content: merged,
+            testCount: gen.testCount + countTests(existingAugContent),
+          });
+        } else {
+          results.push({ ...gen, relativePath: augPath });
+        }
         break;
       }
       case "smart-merge":
@@ -398,8 +418,8 @@ function smartMergeContent(existing: string, generated: string): string {
       );
       if (matchingBlock) {
         // Insert new test cases into matching describe block
-        const childNames = new Set(matchingBlock.children.map((c) => normalizeName(c.name)));
-        const newTests = genBlock.children.filter((c) => !childNames.has(normalizeName(c.name)));
+        const childNames = new Set(matchingBlock.children.map((c) => c.name.toLowerCase()));
+        const newTests = genBlock.children.filter((c) => !childNames.has(c.name.toLowerCase()));
         if (newTests.length > 0) {
           // Find insertion point (just before closing of describe)
           const insertLine = matchingBlock.endLine - 2 + lineOffset;
@@ -497,6 +517,16 @@ function reindentBlock(lines: string[], targetBase: number): string[] {
     const level = baseUnit > 0 ? Math.round(curIndent / baseUnit) : 0;
     return " ".repeat(level * targetBase) + l.trimStart();
   });
+}
+
+function extractSigHead(sig: string): string {
+  let parenDepth = 0;
+  for (let i = 0; i < sig.length; i++) {
+    if (sig[i] === "(") parenDepth++;
+    else if (sig[i] === ")") parenDepth--;
+    else if (sig[i] === "{" && parenDepth === 0) return sig.slice(0, i);
+  }
+  return sig;
 }
 
 function countTests(content: string): number {

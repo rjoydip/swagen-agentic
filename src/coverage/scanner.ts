@@ -86,6 +86,10 @@ function assessCoverage(entity: SourceEntity, refs: EntityReference[]): Coverage
 
   const itRefs = refs.filter((r) => r.type === "it");
   const callRefs = refs.filter((r) => r.type === "call");
+  const importRefs = refs.filter((r) => r.type === "import");
+
+  // Import-only references do not constitute test coverage
+  if (itRefs.length === 0 && callRefs.length === 0) return "none";
 
   if (itRefs.length >= 2) return "full";
   if (itRefs.length === 1 && callRefs.length >= 1) return "full";

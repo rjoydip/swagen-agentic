@@ -65,32 +65,32 @@ server.listen(3000);
 
 describe("extractEntities", () => {
   it("extracts exported functions", () => {
-    const entities = extractEntities("test.ts", SAMPLE_SOURCE);
+    const entities = extractEntities("test.ts", undefined, SAMPLE_SOURCE);
     const exports = entities.filter((e) => e.isExported && e.type === "function");
     expect(exports.length).toBeGreaterThanOrEqual(2);
     expect(exports.some((e) => e.name === "getUser")).toBe(true);
   });
 
   it("extracts classes", () => {
-    const entities = extractEntities("test.ts", SAMPLE_SOURCE);
+    const entities = extractEntities("test.ts", undefined, SAMPLE_SOURCE);
     const classes = entities.filter((e) => e.type === "class");
     expect(classes.length).toBe(1);
     expect(classes[0]!.name).toBe("UserService");
   });
 
   it("returns empty array for empty source", () => {
-    const entities = extractEntities("empty.ts", EMPTY_SOURCE);
+    const entities = extractEntities("empty.ts", undefined, EMPTY_SOURCE);
     expect(entities.length).toBe(0);
   });
 
   it("extracts async functions", () => {
-    const entities = extractEntities("test.ts", SAMPLE_SOURCE);
+    const entities = extractEntities("test.ts", undefined, SAMPLE_SOURCE);
     const asyncFns = entities.filter((e) => e.isAsync);
     expect(asyncFns.length).toBeGreaterThanOrEqual(1);
   });
 
   it("marks exported entities correctly", () => {
-    const entities = extractEntities("test.ts", SAMPLE_SOURCE);
+    const entities = extractEntities("test.ts", undefined, SAMPLE_SOURCE);
     const exported = entities.filter((e) => e.isExported);
     expect(exported.length).toBeGreaterThanOrEqual(3);
   });

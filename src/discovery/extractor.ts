@@ -2,11 +2,15 @@ import { readFileSync } from "node:fs";
 import type { SourceEntity } from "../core/types.ts";
 import { countNewlines } from "../utils/fmt.ts";
 
-export function extractEntities(filePath: string, content?: string): SourceEntity[] {
-  const code = content ?? readFileSync(filePath, "utf-8");
+export function extractEntities(
+  absPath: string,
+  relPath?: string,
+  content?: string,
+): SourceEntity[] {
+  const code = content ?? readFileSync(absPath, "utf-8");
   const entities: SourceEntity[] = [];
   const lines = code.split("\n");
-  const fileName = filePath.split(/[/\\]/).pop() ?? filePath;
+  const fileName = relPath ?? absPath.split(/[/\\]/).pop() ?? absPath;
 
   const patterns: Array<{
     regex: RegExp;

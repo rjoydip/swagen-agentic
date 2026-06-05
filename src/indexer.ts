@@ -52,7 +52,7 @@ export async function buildIndex(cwd = process.cwd()): Promise<CodebaseIndex> {
       if (f.type === "source") {
         try {
           const content = readFileSync(join(cwd, f.path), "utf-8");
-          const ents = extractEntities(join(cwd, f.path), content);
+          const ents = extractEntities(join(cwd, f.path), f.path, content);
           for (const e of ents) {
             entities.push({ name: e.name, type: e.type, file: f.path, line: e.line });
           }
