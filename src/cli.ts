@@ -38,6 +38,48 @@ const COMMANDS: CommandDef[] = [
     args: "<spec>",
     description:
       "Agentic test generation from a spec file or URL. Use --existing for codebase mode.",
+    flags: [
+      {
+        flag: "--existing",
+        description: "Enable codebase mode (discover existing code instead of spec)",
+      },
+      { flag: "--provider <name>", description: "AI provider (e.g. anthropic, openai)" },
+      { flag: "--model <id>", description: "AI model id" },
+      { flag: "--out-dir, -o <dir>", description: "Output directory for generated tests" },
+      { flag: "--runner, -r <name>", description: "Test runner (bun or vitest)" },
+      { flag: "--dry-run", description: "Preview generated files without writing them" },
+      { flag: "--parallel <N>", description: "Run N parallel agents" },
+      { flag: "--verbose", description: "Stream all agent events" },
+      { flag: "--augment", description: "Augment existing test files" },
+      {
+        flag: "--augment-strategy <s>",
+        description: "Augmentation strategy (smart-merge, append, separate)",
+      },
+    ],
+    examples: [
+      { cmd: "swagen generate openapi.yaml", desc: "Generate tests from spec" },
+      { cmd: "swagen generate --existing src/", desc: "Generate tests for existing codebase" },
+    ],
+  },
+  {
+    name: "run",
+    args: "<spec>",
+    description:
+      "Generate and then execute tests in a single pass. Accepts same flags as generate.",
+    flags: [
+      { flag: "--existing", description: "Enable codebase mode" },
+      { flag: "--provider <name>", description: "AI provider" },
+      { flag: "--model <id>", description: "AI model id" },
+      { flag: "--out-dir, -o <dir>", description: "Output directory" },
+      { flag: "--runner, -r <name>", description: "Test runner" },
+      { flag: "--dry-run", description: "Preview only" },
+      { flag: "--parallel <N>", description: "Run N parallel agents" },
+    ],
+  },
+  {
+    name: "validate",
+    args: "<spec>",
+    description: "Validate an OpenAPI spec without generating tests.",
   },
   {
     name: "resume",

@@ -327,12 +327,12 @@ function smartMergeContent(existing: string, generated: string): string {
         if (newTests.length > 0) {
           // Find insertion point (just before closing of describe)
           const insertLine = matchingBlock.endLine - 2;
+          const generatedLines = generated.split("\n");
           const newLines = newTests.map((t) => {
-            const testLines = existingLines.slice(t.startLine - 1, t.endLine);
+            const testLines = generatedLines.slice(t.startLine - 1, t.endLine);
             return testLines.join("\n");
           });
           existingLines.splice(insertLine, 0, ...newLines.map((l) => indentLine(l, 2)));
-          // Adjust line numbers aren't critical since this is a string merge
         }
       } else {
         // No matching describe — append the whole block

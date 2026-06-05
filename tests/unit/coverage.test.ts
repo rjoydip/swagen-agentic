@@ -56,23 +56,20 @@ describe("buildCoverageReport", () => {
         existingTests: [],
       },
       {
-        entity: makeEntity({ name: "b" }),
-        coverage: "full" as const,
-        gapDescription: "",
-        existingTests: ["b.test.ts"],
-      },
-      {
         entity: makeEntity({ name: "c" }),
         coverage: "partial" as const,
         gapDescription: "missing edge cases",
         existingTests: ["c.test.ts"],
       },
     ];
+    // scanCoverage never returns "full" in gaps, so buildCoverageReport
+    // infers covered = totalEntities - partial - low - uncovered
     const report = buildCoverageReport(gaps, 5);
     expect(report.totalEntities).toBe(5);
-    expect(report.covered).toBe(1);
+    expect(report.covered).toBe(3); // 5 - 1 - 0 - 1 = 3
     expect(report.uncovered).toBe(1);
     expect(report.partial).toBe(1);
+    expect(report.low).toBe(0);
   });
 
   it("handles empty gaps", () => {

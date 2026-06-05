@@ -62,15 +62,16 @@ function findReferences(
 
       // Check for import reference
       for (const name of names) {
-        if (new RegExp(`import\\s+.*\\b${name}\\b`).test(line)) {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        if (new RegExp(`import\\s+.*\\b${escaped}\\b`).test(line)) {
           refs.push({ file: tc.path, line: i + 1, type: "import" });
         }
         // Check for describe/it title mentioning entity name
-        if (new RegExp(`(?:describe|it|test)\\s*\\(\\s*["'\`][^"'\`]*\\b${name}\\b`).test(line)) {
+        if (new RegExp(`(?:describe|it|test)\\s*\\(\\s*["'\`][^"'\`]*\\b${escaped}\\b`).test(line)) {
           refs.push({ file: tc.path, line: i + 1, type: "it" });
         }
         // Check for direct function call
-        if (new RegExp(`\\b${name}\\s*\\(`).test(line) && !line.trim().startsWith("import")) {
+        if (new RegExp(`\\b${escaped}\\s*\\(`).test(line) && !line.trim().startsWith("import")) {
           refs.push({ file: tc.path, line: i + 1, type: "call" });
         }
       }

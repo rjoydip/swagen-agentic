@@ -187,10 +187,11 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
     }
   }
 
-  // Deduplicate by (name, type, line)
+  // Deduplicate by (name, line) — catches export const foo = (...) => ...
+  // matching both arrow-function and variable patterns on the same line
   const seen = new Set<string>();
   return entities.filter((e) => {
-    const key = `${e.name}:${e.type}:${e.line}`;
+    const key = `${e.name}:${e.line}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

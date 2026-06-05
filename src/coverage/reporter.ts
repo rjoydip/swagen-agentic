@@ -11,12 +11,13 @@ export interface CoverageReport {
 }
 
 export function buildCoverageReport(gaps: CoverageGap[], totalEntities: number): CoverageReport {
-  const covered = gaps.filter((g) => g.coverage === "full").length;
+  // scanCoverage pre-filters to only non-"full" gaps, so "covered" is inferred
   const partial = gaps.filter((g) => g.coverage === "partial").length;
   const low = gaps.filter((g) => g.coverage === "low").length;
   const uncovered = gaps.filter((g) => g.coverage === "none").length;
+  const covered = totalEntities - partial - low - uncovered;
 
-  const tracked = covered + partial + low + uncovered;
+  const tracked = totalEntities;
   const coveragePct = tracked > 0 ? (covered / tracked) * 100 : 0;
 
   return {
