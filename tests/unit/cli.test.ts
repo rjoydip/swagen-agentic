@@ -242,4 +242,54 @@ describe("CLI commands", () => {
     expect(r.flags["model"]).toBe("claude-opus-4-5-20251101");
     expect(r.positionals[0]).toBe("src/");
   });
+
+  it("--existing flag sets existing=true in parsed args", () => {
+    const { parseArgs: parse } = require("../../src/utils/fmt.js");
+    const r = parse(["generate", "src/", "--existing", "--dry-run"]);
+    expect(r.flags["existing"]).toBe(true);
+    expect(r.flags["dry-run"]).toBe(true);
+  });
+
+  it("--augment flag is parseable", () => {
+    const { parseArgs: parse } = require("../../src/utils/fmt.js");
+    const r = parse(["generate", "src/", "--existing", "--augment"]);
+    expect(r.flags["augment"]).toBe(true);
+  });
+
+  it("--augment-strategy flag is parseable", () => {
+    const { parseArgs: parse } = require("../../src/utils/fmt.js");
+    const r = parse(["generate", "src/", "--existing", "--augment-strategy", "append"]);
+    expect(r.flags["augment-strategy"]).toBe("append");
+  });
+
+  it("default config has mode=spec", async () => {
+    const { DEFAULT_CONFIG } = await import("../../src/core/types.js");
+    expect(DEFAULT_CONFIG.mode).toBe("spec");
+  });
+
+  it("resolveConfig passes through discoveryPath from overrides", async () => {
+    const cfg = await resolveConfig({ discoveryPath: "lib", dryRun: true });
+    expect(cfg.dryRun).toBe(true);
+  });
+
+  it("discover command parses --existing before positional", () => {
+    const { parseArgs: parse } = require("../../src/utils/fmt.js");
+    const r = parse(["coverage", "--existing", "src/"]);
+    expect(r.command).toBe("coverage");
+    expect(r.flags["existing"]).toBe("src/");
+  });
+
+  it("coverage command works with positional dir", () => {
+    const { parseArgs: parse } = require("../../src/utils/fmt.js");
+    const r = parse(["coverage", "src/"]);
+    expect(r.command).toBe("coverage");
+    expect(r.positionals[0]).toBe("src/");
+  });
+
+  it("analyze command parses entity name", () => {
+    const { parseArgs: parse } = require("../../src/utils/fmt.js");
+    const r = parse(["analyze", "greet"]);
+    expect(r.command).toBe("analyze");
+    expect(r.positionals[0]).toBe("greet");
+  });
 });

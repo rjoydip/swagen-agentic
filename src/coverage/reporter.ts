@@ -47,18 +47,14 @@ export function formatCoverageReport(
   ];
 
   if (showGaps && report.gaps.length > 0) {
-    // scanCoverage already excludes "full" gaps, but filter for safety
-    const priorityGaps = report.gaps.filter((g) => g.coverage !== "full");
-    if (priorityGaps.length > 0) {
-      lines.push("", "### Priority Gaps (uncovered or low)");
-      for (const gap of priorityGaps.slice(0, gapLimit)) {
-        lines.push(
-          `- ${gap.entity.name} (${gap.entity.file}:${gap.entity.line}) — ${gap.gapDescription}`,
-        );
-      }
-      if (priorityGaps.length > gapLimit) {
-        lines.push(`  ... and ${priorityGaps.length - gapLimit} more`);
-      }
+    lines.push("", "### Priority Gaps (uncovered or low)");
+    for (const gap of report.gaps.slice(0, gapLimit)) {
+      lines.push(
+        `- ${gap.entity.name} (${gap.entity.file}:${gap.entity.line}) — ${gap.gapDescription}`,
+      );
+    }
+    if (report.gaps.length > gapLimit) {
+      lines.push(`  ... and ${report.gaps.length - gapLimit} more`);
     }
   }
 

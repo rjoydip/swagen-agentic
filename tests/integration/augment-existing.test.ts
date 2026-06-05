@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { writeFileSync, readFileSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { discoverCodebase } from "../../src/discovery/index.ts";
 import { scanCoverage } from "../../src/coverage/scanner.ts";
@@ -7,6 +7,7 @@ import { generateUnitTests, mergeTestFiles } from "../../src/core/augmenter.ts";
 import type { SwagenConfig, SourceEntity } from "../../src/core/types.ts";
 
 let testDir: string;
+let tmpTscDir: string;
 
 function makeConfig(outDir = ""): SwagenConfig {
   return {
@@ -38,7 +39,9 @@ function makeConfig(outDir = ""): SwagenConfig {
 describe("augment existing tests — full integration", () => {
   beforeAll(() => {
     testDir = join(process.cwd(), "_testdata_augment");
+    tmpTscDir = join(process.cwd(), "_testdata_tsc_verify");
     rmSync(testDir, { recursive: true, force: true });
+    rmSync(tmpTscDir, { recursive: true, force: true });
     mkdirSync(testDir, { recursive: true });
 
     // greeter.ts source
@@ -84,6 +87,7 @@ describe("augment existing tests — full integration", () => {
 
   afterAll(() => {
     rmSync(testDir, { recursive: true, force: true });
+    rmSync(tmpTscDir, { recursive: true, force: true });
   });
 
   it("discovers entities from source code", () => {
@@ -126,6 +130,39 @@ describe("augment existing tests — full integration", () => {
     expect(file!.content).toContain("unknownAction");
   });
 
+  it("generates tests with correct relative import paths", () => {
+    const analysis = discoverCodebase({ discoveryPath: testDir });
+    const gaps = scanCoverage({
+      sourceEntities: analysis.entities,
+      testFiles: [join(testDir, "greeter.test.ts")],
+      baseDir: testDir,
+    });
+    const uncoveredEntities = gaps.map((g) => g.entity);
+
+    const files = generateUnitTests(
+      uncoveredEntities,
+      makeConfig(""),
+      {
+        runner: "bun",
+        usesDescribe: true,
+        usesAsyncAwait: false,
+        assertionStyle: "expect",
+      },
+      "",
+    );
+    const file = files.find((f) => f.relativePath.includes("greeter"));
+    expect(file).toBeDefined();
+
+    // Import lines must use relative paths (./ or ../), not bare specifiers
+    const importLines = file!.content.split("\n").filter((l) => l.trim().startsWith("import "));
+    for (const imp of importLines) {
+      // Skip test framework imports
+      if (imp.includes('from "bun:test"') || imp.includes("from 'bun:test'")) continue;
+      // Remaining imports must be relative
+      expect(imp).toMatch(/from\s+["']\.\.?\//);
+    }
+  });
+
   it("smart-merges AI tests into existing test, preserving original tests", () => {
     const analysis = discoverCodebase({ discoveryPath: testDir });
     const gaps = scanCoverage({
@@ -165,14 +202,20 @@ describe("augment existing tests — full integration", () => {
       baseDir: testDir,
     });
     const uncoveredEntities = gaps.map((g) => g.entity);
-    const genFiles = generateUnitTests(uncoveredEntities, makeConfig(""), {
-      runner: "bun",
-      usesDescribe: true,
-      usesAsyncAwait: false,
-      assertionStyle: "expect",
-    });
+    const genFiles = generateUnitTests(
+      uncoveredEntities,
+      makeConfig(""),
+      {
+        runner: "bun",
+        usesDescribe: true,
+        usesAsyncAwait: false,
+        assertionStyle: "expect",
+      },
+      "" /* sourceBase: files at root of testDir */,
+    );
     const merged = mergeTestFiles(genFiles, testDir, "smart-merge");
-    const content = merged.find((f) => f.relativePath.includes("greeter"))!.content;
+    const mergedFile = merged.find((f) => f.relativePath.includes("greeter"))!;
+    const content = mergedFile.content;
 
     // Balanced braces and parens
     const openParens = (content.match(/\(/g) || []).length;
@@ -182,7 +225,47 @@ describe("augment existing tests — full integration", () => {
     expect(openParens).toBe(closeParens);
     expect(openBraces).toBe(closeBraces);
 
-    expect(content).toMatch(/import\s+/);
+    expect(content).toMatch(/import\s+.*from\s+["']\.\.?\/.*["'];/);
+
+    // Write merged output and original source to temp dir, run tsc
+    const tscTestDir = join(tmpTscDir, "src");
+    mkdirSync(tscTestDir, { recursive: true });
+    // Copy original source alongside merged test so imports resolve
+    writeFileSync(
+      join(tscTestDir, "greeter.ts"),
+      readFileSync(join(testDir, "greeter.ts"), "utf-8"),
+    );
+    writeFileSync(join(tscTestDir, "greeter.test.ts"), content);
+
+    // Create a minimal tsconfig for verification
+    writeFileSync(
+      join(tmpTscDir, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          module: "esnext",
+          moduleResolution: "bundler",
+          target: "esnext",
+          noEmit: true,
+          skipLibCheck: true,
+        },
+        include: ["src"],
+      }),
+    );
+
+    const tsc = Bun.spawnSync(["bun", "tsc", "--noEmit"], {
+      cwd: tmpTscDir,
+    });
+    const stdout = tsc.stdout.toString();
+    // Expect no module-resolution errors (the original concern — bare specifier bugs).
+    // Argument-count errors are expected from template-generated tests.
+    const moduleErrors = stdout
+      .split("\n")
+      .filter(
+        (l: string) =>
+          l.includes("Cannot find") || l.includes("Module ") || l.includes("not a module"),
+      );
+    expect(moduleErrors).toHaveLength(0);
   });
 
   it("full end-to-end pipeline produces correct merged file", () => {

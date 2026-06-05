@@ -8,12 +8,13 @@ import { detectFramework, detectRoutePatterns } from "./framework.ts";
 
 export interface DiscoveryOptions {
   discoveryPath?: string;
+  testPath?: string;
   excludeDirs?: string[];
   maxDepth?: number;
 }
 
 export function discoverCodebase(options: DiscoveryOptions = {}): CodebaseAnalysis {
-  const { discoveryPath = "src", excludeDirs = [], maxDepth = 10 } = options;
+  const { discoveryPath = "src", testPath, excludeDirs = [], maxDepth = 10 } = options;
 
   const base = isAbsolute(discoveryPath) ? discoveryPath : join(process.cwd(), discoveryPath);
   if (!existsSync(base)) {
@@ -30,6 +31,19 @@ export function discoverCodebase(options: DiscoveryOptions = {}): CodebaseAnalys
   const allFiles = walkFiles(base, { excludeDirs, maxDepth });
   const sourceFiles = allFiles.filter((f) => isSourceFile(f.path));
   const testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
+
+  // Optionally walk a broader path to find test files outside discoveryPath
+  if (testPath && testPath !== discoveryPath) {
+    const testBase = isAbsolute(testPath) ? testPath : join(process.cwd(), testPath);
+    if (existsSync(testBase)) {
+      const testFiles = walkFiles(testBase, { excludeDirs, maxDepth });
+      for (const tf of testFiles) {
+        if (isTestFile(tf.path) && !testFilePaths.includes(tf.absPath)) {
+          testFilePaths.push(tf.absPath);
+        }
+      }
+    }
+  }
 
   const allEntities: SourceEntity[] = [];
 

@@ -794,7 +794,12 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
       const conventions = analyzeTestPatterns(testFilePaths.map((f) => relative(process.cwd(), f)));
 
       // Generate unit tests for target entities
-      const generatedFiles = generateUnitTests(targetEntities, config, conventions);
+      const generatedFiles = generateUnitTests(
+        targetEntities,
+        config,
+        conventions,
+        config.discoveryPath,
+      );
 
       // Merge with existing test files (relativePath already includes outDir)
       const mergedFiles = mergeTestFiles(generatedFiles, process.cwd(), strategy);

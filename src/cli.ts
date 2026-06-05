@@ -562,19 +562,17 @@ async function cmdDiscover(dir: string | undefined) {
 
 async function cmdCoverage(dir: string | undefined) {
   const { discoverCodebase } = await import("./discovery/index.ts");
-  const { walkFiles, isTestFile } = await import("./discovery/walker.ts");
   const { generateCoverageReport, enrichAnalysisWithCoverage } =
     await import("./coverage/index.ts");
 
   const cwd = dir ? join(process.cwd(), dir) : process.cwd();
   const spinner = createSpinner(`Analyzing coverage in ${cwd}...`);
   try {
-    const analysis = discoverCodebase({ ...(dir ? { discoveryPath: dir } : {}) });
-    let testFilePaths = analysis.testFilePaths ?? [];
-    if (testFilePaths.length === 0) {
-      const allFiles = walkFiles(cwd, { maxDepth: 8 });
-      testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
-    }
+    const analysis = discoverCodebase({
+      ...(dir ? { discoveryPath: dir } : {}),
+      testPath: ".",
+    });
+    const testFilePaths = analysis.testFilePaths ?? [];
     const enriched = enrichAnalysisWithCoverage(analysis, testFilePaths, cwd);
     const report = generateCoverageReport(enriched, testFilePaths, cwd);
     spinner.succeed(
@@ -597,16 +595,11 @@ async function cmdAnalyze(entity: string | undefined) {
 
   const { discoverCodebase } = await import("./discovery/index.ts");
   const { enrichAnalysisWithCoverage } = await import("./coverage/index.ts");
-  const { walkFiles, isTestFile } = await import("./discovery/walker.ts");
 
   const spinner = createSpinner(`Analyzing entity "${entity}"...`);
   try {
-    const analysis = discoverCodebase();
-    let testFilePaths = analysis.testFilePaths ?? [];
-    if (testFilePaths.length === 0) {
-      const allFiles = walkFiles(process.cwd(), { maxDepth: 8 });
-      testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
-    }
+    const analysis = discoverCodebase({ testPath: "." });
+    const testFilePaths = analysis.testFilePaths ?? [];
     const enriched = enrichAnalysisWithCoverage(analysis, testFilePaths, process.cwd());
 
     const candidates = enriched.entities.filter(

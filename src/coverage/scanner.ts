@@ -53,6 +53,7 @@ function findReferences(
 ): EntityReference[] {
   const refs: EntityReference[] = [];
   const names = buildNameVariations(entity.name);
+  const seen = new Set<string>();
 
   for (const tc of testContents) {
     const lines = tc.content.split("\n");
@@ -64,15 +65,27 @@ function findReferences(
       for (const name of names) {
         const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         if (new RegExp(`import\\s+.*\\b${escaped}\\b`).test(line)) {
-          refs.push({ file: tc.path, line: i + 1, type: "import" });
+          const key = `${tc.path}:${i + 1}:import`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            refs.push({ file: tc.path, line: i + 1, type: "import" });
+          }
         }
         // Check for describe/it title mentioning entity name
         if (new RegExp(`(?:describe|it|test)\\s*\\(\\s*["'\`][^"'\`]*\\b${escaped}\\b`).test(line)) {
-          refs.push({ file: tc.path, line: i + 1, type: "it" });
+          const key = `${tc.path}:${i + 1}:it`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            refs.push({ file: tc.path, line: i + 1, type: "it" });
+          }
         }
         // Check for direct function call
         if (new RegExp(`\\b${escaped}\\s*\\(`).test(line) && !line.trim().startsWith("import")) {
-          refs.push({ file: tc.path, line: i + 1, type: "call" });
+          const key = `${tc.path}:${i + 1}:call`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            refs.push({ file: tc.path, line: i + 1, type: "call" });
+          }
         }
       }
     }
@@ -91,8 +104,9 @@ function assessCoverage(entity: SourceEntity, refs: EntityReference[]): Coverage
   // Import-only references do not constitute test coverage
   if (itRefs.length === 0 && callRefs.length === 0) return "none";
 
-  if (itRefs.length >= 2) return "full";
+  if (itRefs.length >= 2 && callRefs.length >= 1) return "full";
   if (itRefs.length === 1 && callRefs.length >= 1) return "full";
+  if (itRefs.length >= 2) return "partial";
   if (itRefs.length === 1) return "partial";
   if (callRefs.length >= 2) return "partial";
   if (callRefs.length === 1) return "low";

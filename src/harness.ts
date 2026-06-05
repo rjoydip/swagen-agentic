@@ -30,7 +30,11 @@ import { createTools } from "./tools/index.ts";
 import { saveRunRecord } from "./tools/state.ts";
 import { detectContext, contextPrompt } from "./context.ts";
 import { SkillManager } from "./skills/manager.ts";
-import { BASE_SYSTEM_PROMPT, buildSkillSystemPrompt } from "./core/prompts.ts";
+import {
+  BASE_SYSTEM_PROMPT,
+  CODEBASE_SYSTEM_PROMPT,
+  buildSkillSystemPrompt,
+} from "./core/prompts.ts";
 import type { IStorage } from "./storage.ts";
 import type { ICache } from "./cache.ts";
 import type { Session, SwagenConfig, RunRecord, SkillHook, SkillContext } from "./core/types.ts";
@@ -155,7 +159,7 @@ export class SwagenHarness {
     };
 
     let tools = createTools(this.config, this.cache);
-    let baseSystem = BASE_SYSTEM_PROMPT;
+    let baseSystem = this.config.mode === "codebase" ? CODEBASE_SYSTEM_PROMPT : BASE_SYSTEM_PROMPT;
 
     if (this.skillManager) {
       const { active, inactive } = this.skillManager.resolve(skillCtx);
