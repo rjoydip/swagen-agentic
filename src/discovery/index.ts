@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join, isAbsolute } from "node:path";
 
 import type { CodebaseAnalysis, SourceEntity } from "../core/types.ts";
-import { walkFiles, isSourceFile } from "./walker.ts";
+import { walkFiles, isSourceFile, isTestFile } from "./walker.ts";
 import { extractEntities } from "./extractor.ts";
 import { detectFramework, detectRoutePatterns } from "./framework.ts";
 
@@ -29,6 +29,7 @@ export function discoverCodebase(options: DiscoveryOptions = {}): CodebaseAnalys
 
   const allFiles = walkFiles(base, { excludeDirs, maxDepth });
   const sourceFiles = allFiles.filter((f) => isSourceFile(f.path));
+  const testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
 
   const allEntities: SourceEntity[] = [];
 
@@ -80,6 +81,7 @@ export function discoverCodebase(options: DiscoveryOptions = {}): CodebaseAnalys
     entryPoints,
     apiEndpoints,
     framework,
+    testFilePaths,
   };
 }
 

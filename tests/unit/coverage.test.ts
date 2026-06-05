@@ -10,6 +10,7 @@ import type { SourceEntity, CodebaseAnalysis } from "../../src/core/types.ts";
 function makeEntity(overrides: Partial<SourceEntity>): SourceEntity {
   return {
     type: "function",
+    entityKind: "declaration",
     name: "testFn",
     file: "src/test.ts",
     line: 1,

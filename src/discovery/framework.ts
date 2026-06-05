@@ -168,6 +168,8 @@ function inferNextJSPath(filePath: string): string {
     .replace(/\.(tsx?|jsx?)$/, "")
     // Remove route group markers: (group) → ""
     .replace(/\/?\([^)]+\)/g, "")
+    // Remove optional catch-all segments: [[...slug]] → ""
+    .replace(/\/\[{2}\.\.\.[^\]]+\]{2}/g, "")
     // Remove catch-all segments: [...slug] → ""
     .replace(/\/\[\.\.\.[^\]]+\]/g, "")
     // Dynamic params: [id] → :id

@@ -18,6 +18,7 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
       build: (m, line) => {
         return {
           type: "function",
+          entityKind: "declaration",
           name: m[2] ?? "unknown",
           file: fileName,
           line,
@@ -35,6 +36,7 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
         const fullMatch = m[0] ?? "";
         return {
           type: "function",
+          entityKind: "declaration",
           name: m[1] ?? "unknown",
           file: fileName,
           line,
@@ -50,6 +52,7 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
       regex: /export\s+(abstract\s+)?class\s+(\w+)/g,
       build: (m, line) => ({
         type: "class",
+        entityKind: "declaration",
         name: m[2] ?? "unknown",
         file: fileName,
         line,
@@ -64,6 +67,7 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
       regex: /^(?:abstract\s+)?class\s+(\w+)/gm,
       build: (m, line) => ({
         type: "class",
+        entityKind: "declaration",
         name: m[1] ?? "unknown",
         file: fileName,
         line,
@@ -80,6 +84,7 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
         const fullMatch = m[0] ?? "";
         return {
           type: "function",
+          entityKind: "arrow",
           name: m[2] ?? "unknown",
           file: fileName,
           line,
@@ -95,6 +100,7 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
       regex: /export\s+(?:const|let|var)\s+(\w+)\s*=/g,
       build: (m, line) => ({
         type: "variable",
+        entityKind: "expression",
         name: m[1] ?? "unknown",
         file: fileName,
         line,
@@ -108,12 +114,15 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
       regex: /export\s+default\s+(?:function|class)\s+(\w+)/g,
       build: (m, line) => {
         const fullMatch = m[0] ?? "";
+        const isFunc = fullMatch.includes("function");
         return {
-          type: fullMatch.includes("function") ? "function" : "class",
+          type: isFunc ? "function" : "class",
+          entityKind: "anonymous",
           name: m[1] ?? "unknown",
           file: fileName,
           line,
           column: m.index,
+          signature: isFunc ? extractSignature(lines, line) : extractClassSignature(lines, line),
           isAsync: false,
           isExported: true,
           visibility: "default",
@@ -133,6 +142,7 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
         const methodName = methodMatch[1] ?? "unknown";
         return {
           type: "method",
+          entityKind: "declaration",
           name: methodName,
           file: fileName,
           line: methodLineIdx,
@@ -151,6 +161,7 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
         const fullMatch = m[0] ?? "";
         return {
           type: "interface",
+          entityKind: "declaration",
           name: m[1] ?? "unknown",
           file: fileName,
           line,
@@ -167,6 +178,7 @@ export function extractEntities(filePath: string, content?: string): SourceEntit
         const fullMatch = m[0] ?? "";
         return {
           type: "type",
+          entityKind: "declaration",
           name: m[1] ?? "unknown",
           file: fileName,
           line,

@@ -15,7 +15,7 @@ export function buildCoverageReport(gaps: CoverageGap[], totalEntities: number):
   const partial = gaps.filter((g) => g.coverage === "partial").length;
   const low = gaps.filter((g) => g.coverage === "low").length;
   const uncovered = gaps.filter((g) => g.coverage === "none").length;
-  const covered = totalEntities - partial - low - uncovered;
+  const covered = Math.max(0, Math.min(totalEntities, totalEntities - partial - low - uncovered));
 
   const tracked = totalEntities;
   const coveragePct = tracked > 0 ? (covered / tracked) * 100 : 0;
@@ -47,8 +47,8 @@ export function formatCoverageReport(
   ];
 
   if (showGaps && report.gaps.length > 0) {
-    // scanCoverage already excludes "full" gaps, filter is for safety
-    const priorityGaps = report.gaps;
+    // scanCoverage already excludes "full" gaps, but filter for safety
+    const priorityGaps = report.gaps.filter((g) => g.coverage !== "full");
     if (priorityGaps.length > 0) {
       lines.push("", "### Priority Gaps (uncovered or low)");
       for (const gap of priorityGaps.slice(0, gapLimit)) {

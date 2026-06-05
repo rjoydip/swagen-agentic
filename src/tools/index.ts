@@ -51,6 +51,9 @@ function err(message: string): ToolResult {
 
 function enrichWithCoverage(state: RunState): string[] {
   if (!state.testFilePaths) {
+    state.testFilePaths = state.codebaseAnalysis?.testFilePaths ?? [];
+  }
+  if (state.testFilePaths.length === 0) {
     const allFiles = walkFiles(process.cwd(), { maxDepth: 8 });
     state.testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
   }
@@ -624,9 +627,6 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
     description:
       "Scan existing test files against discovered source entities. Returns coverage gaps: untested, low coverage, or partial coverage.",
     parameters: Type.Object({
-      threshold: Type.Optional(
-        Type.Number({ description: "Coverage threshold (0-1). Default: 0.7." }),
-      ),
       minGapLevel: Type.Optional(
         Type.Union([Type.Literal("none"), Type.Literal("low"), Type.Literal("partial")], {
           description: "Minimum gap level to report. Default: none.",
@@ -634,8 +634,7 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
       ),
     }),
     async execute(_id: string, params: unknown) {
-      const { threshold: _threshold = 0.7, minGapLevel = "none" } = params as {
-        threshold?: number;
+      const { minGapLevel = "none" } = params as {
         minGapLevel?: "none" | "low" | "partial";
       };
       if (!state.codebaseAnalysis) {
@@ -650,7 +649,9 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
         (g) => (gapLevels[g.coverage] ?? 0) <= (gapLevels[minGapLevel] ?? 0),
       );
 
-      const report = generateCoverageReport(state.codebaseAnalysis, testFilePaths, process.cwd());
+      const report = generateCoverageReport(state.codebaseAnalysis, testFilePaths, process.cwd(), {
+        skipFallback: true,
+      });
 
       return ok(
         {

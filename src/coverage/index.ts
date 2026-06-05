@@ -20,9 +20,10 @@ export function generateCoverageReport(
   analysis: CodebaseAnalysis,
   testFiles: string[],
   baseDir: string,
+  options?: { skipFallback?: boolean },
 ): string {
   const gaps =
-    analysis.coverageGaps.length > 0
+    analysis.coverageGaps.length > 0 || options?.skipFallback
       ? analysis.coverageGaps
       : scanCoverage({
           sourceEntities: analysis.entities,

@@ -28,6 +28,7 @@ export type AugmentStrategy = "smart-merge" | "append" | "separate";
 
 export interface SourceEntity {
   type: "function" | "class" | "method" | "export" | "type" | "interface" | "variable";
+  entityKind: "declaration" | "arrow" | "anonymous" | "expression";
   name: string;
   file: string;
   line: number;
@@ -61,6 +62,7 @@ export interface CodebaseAnalysis {
   entryPoints: string[];
   apiEndpoints: SourceEntity[];
   framework: ApiFramework;
+  testFilePaths?: string[];
 }
 
 export interface AugmentOptions {

@@ -96,7 +96,7 @@ export async function detectContext(cwd = process.cwd()): Promise<ProjectContext
   if (ctx.apiFrameworks.length === 0) {
     try {
       const all = walkFiles(join(cwd, "src"), { maxDepth: 4 });
-      for (const entry of all.slice(0, 10)) {
+      for (const entry of all.slice(0, 50)) {
         // eslint-disable-next-line no-await-in-loop
         const content = await Bun.file(entry.absPath).text();
         if (content.includes("@Controller(") || content.includes("@Module(")) {

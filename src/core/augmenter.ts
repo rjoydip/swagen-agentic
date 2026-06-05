@@ -3,6 +3,53 @@ import { join, isAbsolute } from "node:path";
 
 import type { SourceEntity, SwagenConfig, GeneratedFile } from "./types.ts";
 
+const BUILT_IN_TYPES = new Set([
+  "string",
+  "number",
+  "boolean",
+  "null",
+  "undefined",
+  "void",
+  "never",
+  "any",
+  "unknown",
+  "bigint",
+  "symbol",
+  "true",
+  "false",
+  "Promise",
+  "Array",
+  "Record",
+  "Partial",
+  "Required",
+  "Readonly",
+  "Pick",
+  "Omit",
+  "Exclude",
+  "Extract",
+  "NonNullable",
+  "ReturnType",
+  "Parameters",
+  "Awaited",
+  "Capitalize",
+  "Uncapitalize",
+  "Uppercase",
+  "Lowercase",
+  "Function",
+  "Error",
+  "Date",
+  "RegExp",
+  "Map",
+  "Set",
+  "WeakMap",
+  "WeakSet",
+  "Buffer",
+  "URL",
+  "URLSearchParams",
+  "File",
+  "Blob",
+]);
+
 // ─── Test file parsing ───────────────────────────────────────────────────────
 
 export interface TestBlock {
@@ -216,10 +263,21 @@ function buildEntityImport(entity: SourceEntity, importPath: string): string[] {
     imports.push(`import { ${entity.name} } from "${importPath}";`);
   }
 
-  // Add imports for types/interfaces referenced
-  const typeMatch = entity.signature?.match(/: (\w+)/g);
-  if (typeMatch) {
-    const types = [...new Set(typeMatch.map((m) => m.replace(": ", "")))];
+  // Extract types from signature — restrict to declaration only (before body brace)
+  const sig = entity.signature ?? "";
+  const sigHead = sig.split("{")[0] ?? "";
+  const typeMatch = sigHead.match(/: (\w+)/g);
+  const genericMatch = sigHead.match(/<(\w+)>/g);
+  const allTypeCandidates = [
+    ...(typeMatch ?? []).map((m) => m.replace(": ", "")),
+    ...(genericMatch ?? []).map((m) => m.replace(/[<>]/g, "")),
+  ];
+  if (allTypeCandidates.length > 0) {
+    const types = [
+      ...new Set(
+        allTypeCandidates.filter((t) => !BUILT_IN_TYPES.has(t) && t[0]?.toUpperCase() === t[0]),
+      ),
+    ];
     if (types.length > 0) {
       imports.push(`import type { ${types.join(", ")} } from "${importPath}";`);
     }
@@ -346,12 +404,12 @@ function smartMergeContent(existing: string, generated: string): string {
           // Find insertion point (just before closing of describe)
           const insertLine = matchingBlock.endLine - 2 + lineOffset;
           const generatedLines = generated.split("\n");
-          const newLines = newTests.map((t) => {
+          const newBlocks = newTests.map((t) => {
             const testLines = generatedLines.slice(t.startLine - 1, t.endLine);
-            return testLines.join("\n");
+            return reindentBlock(testLines, indentSize);
           });
-          existingLines.splice(insertLine, 0, ...newLines.map((l) => indentLine(l, indentSize)));
-          lineOffset += newLines.length;
+          existingLines.splice(insertLine, 0, ...newBlocks.flat());
+          lineOffset += newBlocks.reduce((s, b) => s + b.length, 0);
         }
       } else {
         // No matching describe — append the whole block
@@ -417,13 +475,28 @@ function normalizeName(name: string): string {
 }
 
 function detectIndent(existing: string): number {
-  const match = existing.match(/^(  |> )/m);
-  if (match) return match[1]!.length;
-  return 2;
+  const indents = existing.match(/^( {2,4})(?=\S)/gm);
+  if (!indents || indents.length === 0) return 2;
+  const counts = new Map<number, number>();
+  for (const i of indents) {
+    const len = i.length;
+    counts.set(len, (counts.get(len) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]![0];
 }
 
-function indentLine(line: string, spaces: number): string {
-  return " ".repeat(spaces) + line;
+function reindentBlock(lines: string[], targetBase: number): string[] {
+  // Determine the base indent unit (smallest positive indent in the block)
+  const nonEmpty = lines.filter((l) => l.trim().length > 0);
+  if (nonEmpty.length === 0) return lines;
+  const indents = nonEmpty.map((l) => l.match(/^(\s*)/)?.[1]?.length ?? 0).filter((i) => i > 0);
+  const baseUnit = indents.length > 0 ? Math.min(...indents) : targetBase;
+  return lines.map((l) => {
+    if (l.trim().length === 0) return "";
+    const curIndent = l.match(/^(\s*)/)?.[1]?.length ?? 0;
+    const level = baseUnit > 0 ? Math.round(curIndent / baseUnit) : 0;
+    return " ".repeat(level * targetBase) + l.trimStart();
+  });
 }
 
 function countTests(content: string): number {

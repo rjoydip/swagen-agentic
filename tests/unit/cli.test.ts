@@ -215,6 +215,15 @@ describe("CLI commands", () => {
     expect(r.positionals).toEqual(["src/"]);
   });
 
+  it("swagen generate --existing src/ (positional after flag) sets existing as string", () => {
+    const { parseArgs: parse } = require("../../src/utils/fmt.js");
+    // Parser consumes next non-flag arg as flag value, so --existing takes src/ as value
+    const r = parse(["generate", "--existing", "src/", "--dry-run"]);
+    expect(r.flags["existing"]).toBe("src/");
+    expect(r.flags["dry-run"]).toBe(true);
+    expect(r.positionals).toEqual([]);
+  });
+
   it("swagen generate --existing src/ with provider flags is parseable", () => {
     const { parseArgs: parse } = require("../../src/utils/fmt.js");
     const r = parse([

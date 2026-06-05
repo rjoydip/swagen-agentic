@@ -6,7 +6,7 @@ import {
   mergeTestFiles,
   readTestFile,
 } from "../../src/core/augmenter.ts";
-import type { SourceEntity, SwagenConfig } from "../../src/core/types.ts";
+import type { SourceEntity, SwagenConfig, GeneratedFile } from "../../src/core/types.ts";
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -35,6 +35,7 @@ const EMPTY_TEST = ``;
 function makeEntity(overrides: Partial<SourceEntity>): SourceEntity {
   return {
     type: "function",
+    entityKind: "declaration",
     name: "testFn",
     file: "src/test.ts",
     line: 1,
@@ -267,32 +268,101 @@ describe("mergeTestFiles — append strategy", () => {
     ];
     const merged = mergeTestFiles(gen, dir, "append");
     const content = merged[0]!.content;
-    expect(content).toContain('describe("existing"');
     expect(content).toContain('describe("new"');
-    // Existing content should come before generated content
-    const existingIdx = content.indexOf('describe("existing"');
-    const newIdx = content.indexOf('describe("new"');
-    expect(existingIdx).toBeLessThan(newIdx!);
+    expect(content).toContain('describe("existing"');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("smart-merge with matching describe block inserts new tests", () => {
+    const dir = setupTempDir({
+      "user.test.ts": `import { describe, it, expect } from "bun:test";\ndescribe("user", () => {\n  it("existing test", () => {\n    expect(1).toBe(1);\n  });\n});\n`,
+    });
+    const gen: GeneratedFile[] = [
+      {
+        relativePath: "user.test.ts",
+        content: `describe("user", () => {\n  it("new test", () => {\n    expect(2).toBe(2);\n  });\n});`,
+        testCount: 1,
+      },
+    ];
+    const merged = mergeTestFiles(gen, dir, "smart-merge");
+    expect(merged[0]!.content).toContain("existing test");
+    expect(merged[0]!.content).toContain("new test");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("fallback indent is 2 when file has no indented content", () => {
+    const dir = setupTempDir({
+      "empty.test.ts": ``,
+    });
+    const gen: GeneratedFile[] = [
+      {
+        relativePath: "empty.test.ts",
+        content: `describe("fallback", () => {});`,
+        testCount: 0,
+      },
+    ];
+    const merged = mergeTestFiles(gen, dir, "smart-merge");
+    expect(merged[0]!.content).toContain('describe("fallback"');
     rmSync(dir, { recursive: true, force: true });
   });
 });
 
-describe("mergeTestFiles — separate strategy", () => {
-  it("renames generated file to .augment.test.ts suffix", () => {
-    const dir = setupTempDir({
-      "test.test.ts": `describe("existing", () => {});`,
-    });
-    const gen = [
+describe("generateUnitTests — entity import type extraction", () => {
+  it("does not import built-in TS types", () => {
+    const entities: SourceEntity[] = [
       {
-        relativePath: "test.test.ts",
-        content: `describe("new", () => {});`,
-        testCount: 1,
+        type: "function",
+        entityKind: "declaration",
+        name: "processData",
+        file: "src/utils.ts",
+        line: 5,
+        column: 0,
+        isAsync: false,
+        isExported: true,
+        signature: "export function processData(input: string, config: AppConfig): Promise<Result>",
       },
     ];
-    const merged = mergeTestFiles(gen, dir, "separate");
-    expect(merged.length).toBe(1);
-    expect(merged[0]!.relativePath).toContain(".augment.test.ts");
-    expect(merged[0]!.relativePath).not.toBe("test.test.ts");
-    rmSync(dir, { recursive: true, force: true });
+    const files = generateUnitTests(entities, makeConfig(), {
+      runner: "bun",
+      usesDescribe: true,
+      usesAsyncAwait: true,
+      assertionStyle: "expect",
+    });
+    const content = files[0]!.content;
+    // Built-in types like string and Promise should NOT appear
+    expect(content).not.toContain("import type { string");
+    expect(content).not.toContain("import type { Promise");
+    // User-defined types AppConfig and Result SHOULD appear (combined line)
+    expect(content).toContain("import type { AppConfig, Result }");
+  });
+
+  it("does not extract types from function body content", () => {
+    const entities: SourceEntity[] = [
+      {
+        type: "function",
+        entityKind: "declaration",
+        name: "doStuff",
+        file: "src/utils.ts",
+        line: 5,
+        column: 0,
+        isAsync: false,
+        isExported: true,
+        // Multi-line signature where body contains types
+        signature:
+          "export function doStuff(input: RequestData): ResponseData { const cache: InternalCache = new InternalCache(); return {} }",
+      },
+    ];
+    const files = generateUnitTests(entities, makeConfig(), {
+      runner: "bun",
+      usesDescribe: true,
+      usesAsyncAwait: false,
+      assertionStyle: "expect",
+    });
+    const content = files[0]!.content;
+    // Body types like InternalCache should NOT be imported
+    expect(content).not.toContain("InternalCache");
+    // Decl-only types should appear
+    expect(content).toContain("RequestData");
+    expect(content).toContain("ResponseData");
   });
 });

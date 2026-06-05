@@ -17,6 +17,7 @@ function makeAnalysis(overrides?: Partial<CodebaseAnalysis>): CodebaseAnalysis {
 function makeEntity(name: string, overrides?: Partial<SourceEntity>): SourceEntity {
   return {
     type: "function",
+    entityKind: "declaration",
     name,
     file: "src/test.ts",
     line: 10,
