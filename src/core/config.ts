@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { SwagenConfig } from "./types.ts";
 import { DEFAULT_CONFIG } from "./types.ts";
 import { validateConfig } from "./schema.ts";
+import { logger } from "../utils/logger.ts";
 
 const CONFIG_FILENAMES = ["swagen.config.ts", "swagen.config.js", "swagen.config.json"];
 
@@ -33,7 +34,7 @@ async function loadConfigFile(cwd: string): Promise<Partial<SwagenConfig>> {
       // eslint-disable-next-line no-await-in-loop
       return (typeof exp === "function" ? await exp() : exp) as Partial<SwagenConfig>;
     } catch (err) {
-      process.stderr.write(`[swagen] Could not load config from ${abs}: ${String(err)}\n`);
+      logger.warn("config", `Could not load ${name}: ${err}`);
     }
   }
   return {};

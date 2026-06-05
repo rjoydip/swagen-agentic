@@ -10,6 +10,7 @@ import { withCache, cacheKey } from "../cache.ts";
 import type { ICache } from "../cache.ts";
 import type { GeneratedFile, ResolvedEndpoint, SwagenConfig } from "../core/types.ts";
 import { formatDuration } from "../utils/fmt.ts";
+import { logger } from "../utils/logger.ts";
 
 interface RunState {
   spec?: Awaited<ReturnType<typeof loadSpec>>;
@@ -241,8 +242,7 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
           continue;
         }
 
-        if (dry) {
-        } else {
+        if (!dry) {
           mkdirSync(dirname(abs), { recursive: true });
           await Bun.write(abs, file.content); // eslint-disable-line no-await-in-loop
         }
@@ -379,13 +379,22 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
         }),
       ),
       maxResults: Type.Optional(Type.Number({ description: "Max results to return. Default 20." })),
+      caseSensitive: Type.Optional(
+        Type.Boolean({ description: "Case-sensitive search. Default false (case-insensitive)." }),
+      ),
     }),
     async execute(_id: string, params: unknown) {
       const {
         pattern,
         pathPattern,
         maxResults = 20,
-      } = params as { pattern: string; pathPattern?: string; maxResults?: number };
+        caseSensitive = false,
+      } = params as {
+        pattern: string;
+        pathPattern?: string;
+        maxResults?: number;
+        caseSensitive?: boolean;
+      };
       const results: Array<{ file: string; line: number; content: string }> = [];
       const glob = new Bun.Glob(pathPattern ?? "**/*.{ts,js,mjs,yaml,yml,json}");
       let count = 0;
@@ -399,14 +408,19 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
             const rel = file.slice(process.cwd().length + 1).replace(/\\/g, "/");
             for (let i = 0; i < lines.length && count < maxResults; i++) {
               const line = lines[i];
-              if (line && line.match(new RegExp(pattern, "i"))) {
+              const flags = caseSensitive ? "" : "i";
+              if (line && line.match(new RegExp(pattern, flags))) {
                 results.push({ file: rel, line: i + 1, content: line.trim().slice(0, 200) });
                 count++;
               }
             }
-          } catch {}
+          } catch (e) {
+            logger.warn("search", `Failed to read ${file}: ${e}`);
+          }
         }
-      } catch {}
+      } catch (e) {
+        logger.warn("search", `Glob scan error: ${e}`);
+      }
       if (results.length === 0) return ok({ message: "No matches found.", results: [] });
       return ok({ matchCount: results.length, results });
     },
@@ -431,6 +445,12 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
       dryRun: Type.Optional(
         Type.Boolean({ description: "Preview changes without writing. Default true." }),
       ),
+      caseSensitive: Type.Optional(
+        Type.Boolean({
+          description:
+            "Case-sensitive match. Default true (case-sensitive). Only applies in regex mode; string mode is always case-sensitive.",
+        }),
+      ),
     }),
     async execute(_id: string, params: unknown) {
       const args = params as {
@@ -439,6 +459,7 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
         pathPattern?: string;
         regex?: boolean;
         dryRun?: boolean;
+        caseSensitive?: boolean;
       };
       const isDryRun = args.dryRun !== false;
       const changes: Array<{ file: string; replaces: number }> = [];
@@ -449,19 +470,23 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
           if (file.includes("node_modules") || file.includes(".swagen")) continue;
           try {
             const text = await Bun.file(file).text();
-            const flags = "g" + (args.regex ? "" : "");
-            const searchPattern = args.regex ? new RegExp(args.pattern, flags) : args.pattern;
+            const regexFlags = "g" + (args.caseSensitive === false ? "i" : "");
+            const searchPattern = args.regex ? new RegExp(args.pattern, regexFlags) : args.pattern;
             const replaced = text.replaceAll(searchPattern as string | RegExp, args.replacement);
             if (replaced === text) continue;
-            const diff = (text.match(searchPattern as string | RegExp) ?? []).length;
+            const diff = text.split(searchPattern as string | RegExp).length - 1;
             const rel = file.slice(process.cwd().length + 1).replace(/\\/g, "/");
             changes.push({ file: rel, replaces: diff });
             if (!isDryRun) {
               await Bun.write(file, replaced);
             }
-          } catch {}
+          } catch (e) {
+            logger.warn("replace", `Failed to process ${file}: ${e}`);
+          }
         }
-      } catch {}
+      } catch (e) {
+        logger.warn("replace", `Glob scan error: ${e}`);
+      }
 
       if (changes.length === 0)
         return ok({ message: "No matches found.", changes: [], dryRun: isDryRun });
@@ -471,6 +496,42 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
         dryRun: isDryRun,
         message: isDryRun ? "Preview only — pass dryRun:false to apply." : "Changes applied.",
       });
+    },
+  };
+
+  // ── 12. task_complete ─────────────────────────────────────────────────────
+  //
+  // Signals that the agent has finished its work. The LLM should call this
+  // when it believes all requested tests have been generated and written.
+  // Providing a clear summary helps produce a better final report.
+
+  const taskComplete: AgentTool<any, any> = {
+    name: "task_complete",
+    label: "Task Complete",
+    description:
+      "Signal that the agent has finished generating tests. Call this when all requested endpoints have been handled. Provide a concise summary of what was done.",
+    parameters: Type.Object({
+      summary: Type.String({
+        description: "Concise summary of what was accomplished (what was generated, any issues).",
+      }),
+      endpointCount: Type.Optional(Type.Number({ description: "Total endpoints processed." })),
+      fileCount: Type.Optional(Type.Number({ description: "Total files written." })),
+    }),
+    async execute(_id: string, params: unknown) {
+      const args = params as {
+        summary: string;
+        endpointCount?: number;
+        fileCount?: number;
+      };
+      return ok(
+        {
+          message: "Task marked as complete.",
+          summary: args.summary,
+          endpointCount: args.endpointCount ?? state.endpoints?.length ?? 0,
+          fileCount: args.fileCount ?? state.generatedFiles?.length ?? 0,
+        },
+        { endpointCount: args.endpointCount ?? 0 },
+      );
     },
   };
 
@@ -486,5 +547,6 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
     cacheStats,
     searchFiles,
     replaceInFiles,
+    taskComplete,
   ];
 }

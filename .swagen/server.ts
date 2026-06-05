@@ -148,7 +148,7 @@ const server = Bun.serve({
       }
 
       if (method === "POST") {
-        const body = await parseBody(req) as Record<string, unknown> | null ?? {};
+        const body = ((await parseBody(req)) as Record<string, unknown> | null) ?? {};
         const existing = pets.get(petId);
         if (!existing) return json({ message: "Pet not found", code: 404 }, 404);
         const updated: Pet = { ...existing, ...body, id: petId };

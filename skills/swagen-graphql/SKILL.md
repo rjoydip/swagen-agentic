@@ -1,5 +1,5 @@
 ---
-name: graphql
+name: swagen-graphql
 description: GraphQL API testing rules — query/mutation/subscription coverage, variable edge cases, fragment reuse
 trigger: GraphQL endpoints or schemas detected
 ---

@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
 
@@ -28,7 +28,7 @@ jobs:
         uses: ./.github/actions/setup-env
 
       - name: Run Fallow analysis
-        uses: fallow-rs/fallow@71cefac7af05f17732482241c7671a401707cc9d # v2.85.0
+        uses: fallow-rs/fallow@157f6bd4d53c0c7ad3bb8293dec6c6c1bc366571 # v2.88.1
         with:
           format: sarif
           comment: true
@@ -37,7 +37,7 @@ jobs:
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4.36.1
         with:
           sarif_file: fallow-results.sarif
           category: fallow-analysis-${{ github.run_id }}

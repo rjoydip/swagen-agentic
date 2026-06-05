@@ -1,5 +1,5 @@
 ---
-name: grpc
+name: swagen-grpc
 description: gRPC API testing rules — unary/streaming calls, error code assertions, deadline/metadata, oneof/map/bytes fields
 trigger: gRPC service definitions detected
 ---
