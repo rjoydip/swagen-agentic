@@ -1,5 +1,5 @@
 ---
-name: soap
+name: swagen-soap
 description: SOAP/XML API testing rules — envelope validation, WS-Security, fault assertions, WSDL binding tests
 trigger: SOAP/XML endpoint specs detected
 ---

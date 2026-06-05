@@ -44,7 +44,7 @@ export function friendlyError(err: unknown): string {
       ansi.gray("  Tip: create a .env file or set the variable in your shell.")
     );
   }
-  if ((err as Record<string, unknown>).name === "SpecLoadError") {
+  if (err && (err as Record<string, unknown>).name === "SpecLoadError") {
     return ansi.red(`Spec error: ${(err as Error).message}`);
   }
   const msg = err instanceof Error ? err.message : String(err);

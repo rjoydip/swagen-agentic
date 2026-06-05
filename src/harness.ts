@@ -35,8 +35,8 @@ import type { IStorage } from "./storage.ts";
 import type { ICache } from "./cache.ts";
 import type { Session, SwagenConfig, RunRecord, SkillHook, SkillContext } from "./core/types.ts";
 import type { ResolvedEndpoint, GeneratedFile } from "./core/types.ts";
-import { ansi } from "./utils/fmt.ts";
 import { checkApiKey } from "./utils/errors.ts";
+import { logger } from "./utils/logger.ts";
 
 // ─── Harness ──────────────────────────────────────────────────────────────────
 
@@ -162,23 +162,19 @@ export class SwagenHarness {
       this.activeHooks = this.skillManager.collectHooks(active);
 
       if (active.length > 0) {
-        process.stderr.write(
-          ansi.cyan(`[swagen] Active skills: ${active.map((s) => s.name).join(", ")}\n`),
-        );
+        logger.info("skills", `Active: ${active.map((s) => s.name).join(", ")}`);
         baseSystem = buildSkillSystemPrompt(
           BASE_SYSTEM_PROMPT,
           active.map((s) => s.systemPrompt).filter(Boolean) as string[],
         );
         const skillTools = this.skillManager.collectTools(active);
         if (skillTools.length > 0) {
-          process.stderr.write(ansi.gray(`  → ${skillTools.length} skill tool(s) registered\n`));
+          logger.info("skills", `${skillTools.length} skill tool(s) registered`);
         }
         tools = [...tools, ...skillTools];
       }
       if (inactive.length > 0) {
-        process.stderr.write(
-          ansi.gray(`[swagen] Inactive skills: ${inactive.map((s) => s.name).join(", ")}\n`),
-        );
+        logger.debug("skills", `Inactive: ${inactive.map((s) => s.name).join(", ")}`);
       }
     }
 
@@ -198,11 +194,11 @@ export class SwagenHarness {
         msgs.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult"),
       toolExecution: "sequential",
       beforeToolCall: async ({ toolCall, context: _ctx }) => {
-        process.stderr.write(ansi.gray(`  [swagen] → ${toolCall.name}\n`));
+        logger.debug("agent", `→ ${toolCall.name}`);
         return undefined;
       },
       afterToolCall: async ({ toolCall, isError }) => {
-        if (isError) process.stderr.write(ansi.yellow(`  [swagen] ✗ ${toolCall.name} errored\n`));
+        if (isError) logger.warn("agent", `✗ ${toolCall.name} errored`);
         return undefined;
       },
     };

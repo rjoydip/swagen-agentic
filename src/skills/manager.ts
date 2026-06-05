@@ -1,7 +1,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Skill, SkillContext, SwagenConfig } from "../core/types.ts";
 import { buildSkillSystemPrompt } from "../core/prompts.ts";
-import { ansi } from "../utils/fmt.ts";
+import { logger } from "../utils/logger.ts";
 
 export interface ResolvedSkills {
   active: Skill[];
@@ -15,9 +15,7 @@ export class SkillManager {
 
   register(skill: Skill): void {
     if (this.registry.has(skill.name)) {
-      process.stderr.write(
-        ansi.yellow(`[swagen] Skill "${skill.name}" already registered — overwriting\n`),
-      );
+      logger.warn("skills", `"${skill.name}" already registered — overwriting`);
     }
     this.registry.set(skill.name, skill);
   }
@@ -55,14 +53,12 @@ export class SkillManager {
         const mod = await import(item.from);
         const skill: Skill = mod.default ?? mod;
         if (!skill?.name || !skill?.activation) {
-          process.stderr.write(
-            ansi.yellow(`[swagen] Invalid skill at "${item.from}" — missing name or activation\n`),
-          );
+          logger.warn("skills", `Invalid skill at "${item.from}" — missing name or activation`);
           continue;
         }
         this.register(skill);
       } catch (err) {
-        process.stderr.write(ansi.red(`[swagen] Failed to load skill "${item.from}": ${err}\n`));
+        logger.error("skills", `Failed to load skill "${item.from}": ${err}`);
       }
     }
   }
@@ -79,9 +75,7 @@ export class SkillManager {
           inactive.push(skill);
         }
       } catch (err) {
-        process.stderr.write(
-          ansi.yellow(`[swagen] Skill "${skill.name}" activation threw: ${err}\n`),
-        );
+        logger.warn("skills", `"${skill.name}" activation threw: ${err}`);
         inactive.push(skill);
       }
     }

@@ -79,4 +79,34 @@ describe("createTools", () => {
     expect(data.entries).toBe(0);
     expect(data.hits).toBe(0);
   });
+
+  it("task_complete tool returns summary with counts", async () => {
+    const cache = new MemoryCache();
+    const tools = createTools(makeConfig(), cache);
+    const tool = tools.find((t) => t.name === "task_complete")!;
+    const result = await tool.execute("1", {
+      summary: "Generated tests for all pets endpoints.",
+      endpointCount: 5,
+      fileCount: 3,
+    });
+    const text = result.content[0] as { text: string };
+    const data = JSON.parse(text.text);
+    expect(data.ok).toBe(true);
+    expect(data.summary).toBe("Generated tests for all pets endpoints.");
+    expect(data.endpointCount).toBe(5);
+    expect(data.fileCount).toBe(3);
+  });
+
+  it("task_complete tool defaults counts when not provided", async () => {
+    const cache = new MemoryCache();
+    const tools = createTools(makeConfig(), cache);
+    const tool = tools.find((t) => t.name === "task_complete")!;
+    const result = await tool.execute("1", { summary: "Done." });
+    const text = result.content[0] as { text: string };
+    const data = JSON.parse(text.text);
+    expect(data.ok).toBe(true);
+    expect(data.summary).toBe("Done.");
+    expect(typeof data.endpointCount).toBe("number");
+    expect(typeof data.fileCount).toBe("number");
+  });
 });

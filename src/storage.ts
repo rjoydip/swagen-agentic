@@ -8,7 +8,7 @@
  *   custom — plug in your own IStorage implementation
  */
 
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Session, RunRecord, StorageConfig } from "./core/types.ts";
 
@@ -85,9 +85,7 @@ export class FileStorage implements IStorage {
   async deleteSession(id: string): Promise<void> {
     const p = this.path(id);
     if (existsSync(p)) {
-      try {
-        Bun.spawnSync(["rm", "-f", p]);
-      } catch {}
+      rmSync(p, { force: true });
     }
   }
 

@@ -1,5 +1,5 @@
 ---
-name: rest
+name: swagen-rest
 description: REST API testing rules — status code coverage, auth flows, pagination, CRUD lifecycle, negative testing
 trigger: RESTful endpoints detected in spec
 ---

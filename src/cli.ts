@@ -6,7 +6,15 @@
  */
 
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
-import { parseArgs, printHelp, createSpinner, ansi, formatDuration } from "./utils/fmt.ts";
+import {
+  parseArgs,
+  printHelp,
+  printCommandHelp,
+  createSpinner,
+  ansi,
+  formatDuration,
+} from "./utils/fmt.ts";
+import type { CommandDef } from "./utils/fmt.ts";
 import { friendlyError } from "./utils/errors.ts";
 import { resolveConfig, starterConfig } from "./core/config.ts";
 import { getLastRun } from "./tools/state.ts";
@@ -24,29 +32,74 @@ import { existsSync } from "node:fs";
 const VERSION = JSON.parse(await Bun.file(join(import.meta.dir, "../../package.json")).text())
   .version as string;
 
-const COMMANDS = [
+const COMMANDS: CommandDef[] = [
   {
     name: "generate",
     args: "<spec>",
     description:
       "Agentic test generation from a spec file or URL. Use --existing for codebase mode.",
   },
-  { name: "run", args: "<spec>", description: "Generate tests then immediately run them" },
-  { name: "validate", args: "<spec>", description: "Validate a spec without generating" },
   {
     name: "resume",
     args: "<id>",
     description: "Resume a previous session with a follow-up prompt",
+    flags: [
+      { flag: "--prompt, -p <text>", description: "Follow-up instruction (required)" },
+      { flag: "--provider <name>", description: "AI provider" },
+      { flag: "--model <id>", description: "Model id" },
+    ],
+    examples: [
+      {
+        cmd: 'swagen resume sess_abc123 --prompt "Add tests for admin endpoints"',
+        desc: "Continue a previous session",
+      },
+    ],
   },
-  { name: "sessions", args: "", description: "List stored agent sessions" },
-  { name: "status", args: "", description: "Show last generation run summary" },
-  { name: "cache", args: "[clear]", description: "Show cache stats, or clear the cache" },
-  { name: "index", args: "[dir]", description: "Build or refresh the codebase index" },
-  { name: "init", args: "", description: "Create a starter swagen.config.ts" },
+  {
+    name: "sessions",
+    args: "",
+    description: "List stored agent sessions",
+    examples: [{ cmd: "swagen sessions", desc: "Show all sessions" }],
+  },
+  {
+    name: "status",
+    args: "",
+    description: "Show last generation run summary",
+    examples: [{ cmd: "swagen status", desc: "Show last run details" }],
+  },
+  {
+    name: "cache",
+    args: "[clear]",
+    description: "Show cache stats, or clear the cache",
+    examples: [
+      { cmd: "swagen cache", desc: "Show cache hit/miss stats" },
+      { cmd: "swagen cache clear", desc: "Clear all cached entries" },
+    ],
+  },
+  {
+    name: "index",
+    args: "[dir]",
+    description: "Build or refresh the codebase index",
+    examples: [
+      { cmd: "swagen index", desc: "Index current directory" },
+      { cmd: "swagen index src/", desc: "Index a specific directory" },
+    ],
+  },
+  {
+    name: "init",
+    args: "",
+    description: "Create a starter swagen.config.ts",
+    examples: [{ cmd: "swagen init", desc: "Create swagen.config.ts in current dir" }],
+  },
   {
     name: "bench",
     args: "<spec>",
-    description: "Benchmark spec loading, analysis, and codegen speed",
+    description: "Benchmark spec loading, analysis, and codegen (no agent call)",
+    flags: [{ flag: "--iterations <N>", description: "Number of benchmark runs (default: 3)" }],
+    examples: [
+      { cmd: "swagen bench openapi.yaml", desc: "Run 3 benchmark iterations" },
+      { cmd: "swagen bench openapi.yaml --iterations 10", desc: "Run 10 benchmark iterations" },
+    ],
   },
   { name: "discover", args: "[dir]", description: "Discover and display project code structure" },
   { name: "coverage", args: "[dir]", description: "Show existing test coverage gaps" },
@@ -54,16 +107,35 @@ const COMMANDS = [
   { name: "help", args: "", description: "Show this help" },
 ];
 
+const COMMAND_MAP = new Map(COMMANDS.map((c) => [c.name, c]));
+
 async function main() {
   const { command, positionals, flags } = parseArgs();
 
-  if (!command || command === "help" || flags["help"] || flags["h"]) {
-    printHelp(COMMANDS, VERSION);
+  if (flags["version"] || flags["v"]) {
+    process.stdout.write(`swagen v${VERSION}\n`);
     process.exit(0);
   }
 
-  if (flags["version"] || flags["v"]) {
-    process.stdout.write(`swagen v${VERSION}\n`);
+  // Detailed help for a specific command
+  const helpTarget = command === "help" ? positionals[0] : null;
+  if (helpTarget && COMMAND_MAP.has(helpTarget)) {
+    printCommandHelp(COMMAND_MAP.get(helpTarget)!, VERSION);
+    process.exit(0);
+  }
+
+  // --help/-h on a specific command → per-command help
+  if ((flags["help"] || flags["h"]) && command) {
+    const cmd = COMMAND_MAP.get(command);
+    if (cmd) {
+      printCommandHelp(cmd, VERSION);
+      process.exit(0);
+    }
+  }
+
+  // General help — no command, bare "help", or bare --help/-h
+  if (!command || command === "help") {
+    printHelp(COMMANDS, VERSION);
     process.exit(0);
   }
 
@@ -565,18 +637,18 @@ function showCacheStats(harness: SwagenHarness) {
 
 function flagsToConfig(flags: Record<string, string | boolean>): Partial<SwagenConfig> {
   const c: Partial<SwagenConfig> = {};
-  if (flags["out-dir"]) c.outDir = flags["out-dir"] as string;
-  if (flags["o"]) c.outDir = flags["o"] as string;
-  if (flags["runner"]) c.runner = flags["runner"] as SwagenConfig["runner"];
-  if (flags["r"]) c.runner = flags["r"] as SwagenConfig["runner"];
-  if (flags["base-url"]) c.baseUrl = `"${flags["base-url"] as string}"`;
+  if (typeof flags["out-dir"] === "string") c.outDir = flags["out-dir"];
+  if (typeof flags["o"] === "string") c.outDir = flags["o"];
+  if (typeof flags["runner"] === "string") c.runner = flags["runner"] as SwagenConfig["runner"];
+  if (typeof flags["r"] === "string") c.runner = flags["r"] as SwagenConfig["runner"];
+  if (typeof flags["base-url"] === "string") c.baseUrl = flags["base-url"];
   if (flags["dry-run"]) c.dryRun = true;
-  if (flags["include-tags"]) c.includeTags = (flags["include-tags"] as string).split(",");
-  if (flags["exclude-tags"]) c.excludeTags = (flags["exclude-tags"] as string).split(",");
-  if (flags["skip"]) c.skipOperations = (flags["skip"] as string).split(",");
-  if (flags["provider"]) c.aiProvider = flags["provider"] as string;
-  if (flags["model"]) c.aiModel = flags["model"] as string;
-  if (flags["storage"])
+  if (typeof flags["include-tags"] === "string") c.includeTags = flags["include-tags"].split(",");
+  if (typeof flags["exclude-tags"] === "string") c.excludeTags = flags["exclude-tags"].split(",");
+  if (typeof flags["skip"] === "string") c.skipOperations = flags["skip"].split(",");
+  if (typeof flags["provider"] === "string") c.aiProvider = flags["provider"];
+  if (typeof flags["model"] === "string") c.aiModel = flags["model"];
+  if (typeof flags["storage"] === "string")
     c.storage = { backend: flags["storage"] as SwagenConfig["storage"]["backend"] };
   if (flags["existing"]) c.mode = "codebase";
   if (flags["augment"]) c.augment = true;

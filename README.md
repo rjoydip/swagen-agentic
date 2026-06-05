@@ -43,6 +43,7 @@ swagen/
 │   │   ├── spec.ts         — spec loader + route analyzer
 │   │   ├── codegen.ts      — Bun/Vitest test file generator
 │   │   ├── config.ts       — config file loader
+<<<<<<< HEAD
 │   │   └── augmenter.ts    — parseTestStructure, generateUnitTests, mergeTestFiles
 │   ├── discovery/
 │   │   ├── index.ts        — discoverCodebase: walk → classify → extract → return CodebaseAnalysis
@@ -56,6 +57,13 @@ swagen/
 │   │   └── reporter.ts     — build/format coverage reports, group gaps
 │   ├── tools/
 │   │   ├── index.ts        — 16 AgentTools with TypeBox schemas + cache
+=======
+│   │   ├── schema.ts       — Zod config validation
+│   │   ├── prompts.ts      — LLM prompt templates
+│   │   └── postprocess.ts  — output cleanup (dedup, strip imports)
+│   ├── tools/
+│   │   ├── index.ts        — 12 AgentTools with TypeBox schemas + cache
+>>>>>>> main
 │   │   └── state.ts        — run record persistence (.swagen/runs/)
 │   ├── skills/             — swagen plugin modules (TypeScript)
 │   │   ├── manager.ts      — SkillManager: register, resolve, compose
@@ -63,31 +71,42 @@ swagen/
 │   │   ├── graphql.ts      — GraphQL plugin
 │   │   ├── grpc.ts         — gRPC plugin
 │   │   └── soap.ts         — SOAP plugin
+│   ├── harness.ts          — SwagenHarness: owns Agent, Skills, Storage, Cache
+│   ├── storage.ts          — IStorage: MemoryStorage, FileStorage, RedisStorage
+│   ├── cache.ts            — ICache: MemoryCache (LRU), FileCache, NoopCache
+│   ├── context.ts          — project context detection
+│   ├── indexer.ts          — codebase indexing
+│   ├── orchestrator.ts     — parallel agent execution
+│   ├── utils/
+│   │   ├── fmt.ts          — ANSI colour, spinner, parseArgs, dedent (no deps)
+│   │   └── errors.ts       — error helpers
+│   ├── cli.ts              — CLI: 11 commands (generate, run, validate, …)
+│   ├── bot/
+│   │   ├── cloudflare.ts   — Cloudflare bot
+│   │   ├── github.ts       — GitHub Actions bot + GitHub App webhook server
+│   │   └── specs.ts        — spec-file detection utility
+│   └── index.ts            — public API surface
 ├── skills/                 — standalone SKILL.md files for AI coding agents
 │   ├── README.md
 │   ├── rest/SKILL.md
 │   ├── graphql/SKILL.md
 │   ├── grpc/SKILL.md
 │   └── soap/SKILL.md
-│   ├── harness/
-│   │   └── index.ts        — SwagenHarness: owns Agent, Skills, Storage, Cache
-│   ├── storage/
-│   │   └── index.ts        — IStorage: MemoryStorage, FileStorage, RedisStorage
-│   ├── cache/
-│   │   └── index.ts        — ICache: MemoryCache (LRU), FileCache, NoopCache
-│   ├── utils/
-│   │   └── fmt.ts          — ANSI colour, spinner, parseArgs, dedent (no deps)
-│   ├── cli/
-│   │   └── index.ts        — CLI: generate, run, validate, resume, sessions, status, cache, init
-│   ├── bot/
-│   │   ├── cloudflare.ts   — Cloudflare bot
-│   │   └── github.ts       — GitHub Actions bot + GitHub App webhook server
-│   └── index.ts            — public API surface
 ├── tests/
 │   ├── unit/
-│   │   ├── utils.test.ts   — parseArgs, dedent, MemoryCache, cacheKey, withCache
+│   │   ├── cache.test.ts   — FileCache, factory edge cases
+│   │   ├── cli.test.ts     — CLI helpers, config validation, error helpers
+│   │   ├── context.test.ts — detectContext
+│   │   ├── indexer.test.ts — buildIndex, searchIndex
+│   │   ├── orchestrator.test.ts — runParallel, splitAndGenerate
+│   │   ├── postprocess.test.ts — dedup, strip unused imports
+│   │   ├── prompts.test.ts — prompt templates
+│   │   ├── skills.test.ts  — SkillManager, built-in skills
 │   │   ├── spec.test.ts    — analyzeSpec, generateTestFiles
-│   │   └── storage.test.ts — MemoryStorage, FileStorage, newSession
+│   │   ├── state.test.ts   — saveRunRecord, listRunRecords, getLastRun
+│   │   ├── storage.test.ts — MemoryStorage, FileStorage, RedisStorage
+│   │   ├── tools.test.ts   — createTools shape + execution
+│   │   └── utils.test.ts   — parseArgs, MemoryCache, cacheKey, withCache
 │   └── integration/
 │       └── harness.test.ts — SwagenHarness session lifecycle + full pipeline
 ├── docs/
@@ -106,7 +125,11 @@ swagen/
 │   └── cache.ts            — Cache backends and statistics
 ├── .github/
 │   ├── workflows/
-│   │   └── swagen.yml      — GitHub Actions workflow
+│   │   ├── ci.yml          — CI: lint, typecheck, test, agentic gen
+│   │   ├── autofix.yml     — automated lint fixes
+│   │   ├── fallow.yml      — dead-code analysis
+│   │   ├── pr-review.yml   — PR review bot
+│   │   └── publish.yml     — npm publish
 │   └── apps/
 │       └── manifest.json   — GitHub App manifest for one-click install
 ├── swagen.config.ts        — Example config file
@@ -331,6 +354,7 @@ export default config;
 | `replace_in_files`  | no     | String/regex replace (dry-run by default) |
 | `get_run_history`   | no     | Audit trail from `.swagen/runs/`          |
 | `cache_stats`       | no     | Hit/miss statistics                       |
+| `task_complete`     | no     | Signal agent completion with summary      |
 
 Active skills can register **additional tools** at runtime — see [`docs/skills.md`](docs/skills.md).
 

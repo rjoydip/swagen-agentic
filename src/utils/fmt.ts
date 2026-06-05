@@ -73,7 +73,7 @@ export function createSpinner(initial: string): Spinner {
         active = false;
       },
       fail(msg?: string) {
-        process.stdout.write("✗ " + (msg ?? current) + "\n");
+        process.stdout.write("x " + (msg ?? current) + "\n");
         active = false;
       },
       stop() {
@@ -157,9 +157,37 @@ export interface ParsedArgs {
  * Minimal arg parser. Handles:
  *   --flag          → { flag: true }
  *   --flag value    → { flag: "value" }
+ *   --flag=value    → { flag: "value" }
  *   --no-flag       → { flag: false }
  *   -f value        → { f: "value" }
  */
+/** Returns the next index to process after consuming the flag at argv[i]. */
+function consumeFlag(
+  argv: string[],
+  i: number,
+  arg: string,
+  flags: Record<string, string | boolean>,
+): number {
+  // --key=value: value embedded in current arg, advance by 1
+  const eqIdx = arg.indexOf("=");
+  if (eqIdx !== -1) {
+    const key = arg.startsWith("--") ? arg.slice(2, eqIdx) : arg.slice(1, eqIdx);
+    flags[key] = arg.slice(eqIdx + 1);
+    return i + 1;
+  }
+  // --key value: value is the next argv element, advance by 2
+  const prefixLen = arg.startsWith("--") ? 2 : 1;
+  const key = arg.slice(prefixLen);
+  const next = argv[i + 1];
+  if (next !== undefined && !next.startsWith("-")) {
+    flags[key] = next;
+    return i + 2;
+  }
+  // Boolean flag: no value consumed, advance by 1
+  flags[key] = true;
+  return i + 1;
+}
+
 export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
   const positionals: string[] = [];
   const flags: Record<string, string | boolean> = {};
@@ -172,25 +200,9 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
       flags[arg.slice(5)] = false;
       i++;
     } else if (arg.startsWith("--")) {
-      const key = arg.slice(2);
-      const next = argv[i + 1];
-      if (next !== undefined && !next.startsWith("-")) {
-        flags[key] = next;
-        i += 2;
-      } else {
-        flags[key] = true;
-        i++;
-      }
+      i = consumeFlag(argv, i, arg, flags);
     } else if (arg.startsWith("-") && arg.length === 2) {
-      const key = arg.slice(1);
-      const next = argv[i + 1];
-      if (next !== undefined && !next.startsWith("-")) {
-        flags[key] = next;
-        i += 2;
-      } else {
-        flags[key] = true;
-        i++;
-      }
+      i = consumeFlag(argv, i, arg, flags);
     } else {
       positionals.push(arg);
       i++;
@@ -211,6 +223,7 @@ export interface CommandDef {
   args?: string;
   description: string;
   flags?: Array<{ flag: string; description: string }>;
+  examples?: Array<{ cmd: string; desc: string }>;
 }
 
 export function printHelp(commands: CommandDef[], version = "0.3.0"): void {
@@ -230,7 +243,37 @@ ${ansi.bold("GLOBAL FLAGS")}
   ${ansi.cyan(w("--parallel <N>", 28))}Split endpoints across N agents in parallel
   ${ansi.cyan(w("--dry-run", 28))}     Print without writing files
   ${ansi.cyan(w("--verbose", 28))}     Stream all agent events
-  ${ansi.cyan(w("--help, -h", 28))}    Show this help
+  ${ansi.cyan(w("--help, -h", 28))}    Show help for any command
+
+${ansi.gray("Run 'swagen help <command>' for detailed help")}
+${ansi.gray("Docs: https://github.com/rjoydip/swagen")}
+`);
+}
+
+export function printCommandHelp(cmd: CommandDef, version: string): void {
+  const w = (s: string, n: number) => s.padEnd(n);
+  process.stdout.write(`
+${ansi.boldCyan("swagen " + cmd.name)} ${ansi.gray(`v${version}`)} — ${cmd.description}
+
+${ansi.bold("USAGE")}
+  swagen ${cmd.name}${cmd.args ? " " + cmd.args : ""}
+
+${ansi.bold("DESCRIPTION")}
+  ${cmd.description}
+${
+  cmd.flags?.length
+    ? `
+${ansi.bold("FLAGS")}
+${cmd.flags.map((f) => `  ${ansi.cyan(w(f.flag, 28))}${f.description}`).join("\n")}`
+    : ""
+}
+${
+  cmd.examples?.length
+    ? `
+${ansi.bold("EXAMPLES")}
+${cmd.examples.map((e) => `  ${ansi.gray("# " + e.desc)}\n  ${ansi.green("$")} ${e.cmd}`).join("\n\n")}`
+    : ""
+}
 
 ${ansi.gray("Docs: https://github.com/rjoydip/swagen")}
 `);
