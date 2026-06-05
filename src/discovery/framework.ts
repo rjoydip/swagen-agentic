@@ -51,7 +51,7 @@ const FRAMEWORKS: FrameworkPattern[] = [
       /from\s+["']http["']/,
       /require\s*\(\s*["']http["']\s*\)/,
     ],
-    patterns: [/createServer\s*\(/, /\.listen\s*\(/, /IncomingMessage/, /ServerResponse/],
+    patterns: [/createServer\s*\(/, /IncomingMessage/, /ServerResponse/],
   },
 ];
 

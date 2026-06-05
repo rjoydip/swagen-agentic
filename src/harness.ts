@@ -168,7 +168,7 @@ export class SwagenHarness {
       if (active.length > 0) {
         logger.info("skills", `Active: ${active.map((s) => s.name).join(", ")}`);
         baseSystem = buildSkillSystemPrompt(
-          BASE_SYSTEM_PROMPT,
+          baseSystem,
           active.map((s) => s.systemPrompt).filter(Boolean) as string[],
         );
         const skillTools = this.skillManager.collectTools(active);
