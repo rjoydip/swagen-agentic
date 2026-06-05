@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
+import type { ApiFramework } from "./core/types.ts";
 
 export interface ProjectContext {
   testRunner: "bun" | "vitest" | "jest" | "unknown";
@@ -16,6 +17,10 @@ export interface ProjectContext {
     usesAsyncAwait: boolean;
     usesExpect: boolean;
   };
+  /** Detected API frameworks in the project */
+  apiFrameworks: ApiFramework[];
+  /** Module system detected from package.json */
+  moduleSystem: "esm" | "cjs" | "unknown";
 }
 
 export async function detectContext(cwd = process.cwd()): Promise<ProjectContext> {
@@ -30,6 +35,8 @@ export async function detectContext(cwd = process.cwd()): Promise<ProjectContext
     sourceFiles: 0,
     testFiles: 0,
     conventions: { usesDescribe: false, usesAsyncAwait: false, usesExpect: false },
+    apiFrameworks: [],
+    moduleSystem: "unknown",
   };
 
   // Detect package manager
@@ -51,7 +58,7 @@ export async function detectContext(cwd = process.cwd()): Promise<ProjectContext
     } catch {}
   }
 
-  // Read package.json for test runner
+  // Read package.json for test runner, module system, and framework deps
   try {
     const pkg = JSON.parse(await Bun.file(join(cwd, "package.json")).text()) as Record<
       string,
@@ -64,7 +71,46 @@ export async function detectContext(cwd = process.cwd()): Promise<ProjectContext
     if (deps["vitest"]) ctx.testRunner = "vitest";
     else if (deps["jest"] || deps["@jest/globals"]) ctx.testRunner = "jest";
     else ctx.testRunner = "bun";
+
+    // Detect module system
+    const typeField = pkg["type"] as string | undefined;
+    if (typeField === "module") ctx.moduleSystem = "esm";
+    else if (typeField === "commonjs") ctx.moduleSystem = "cjs";
+    else ctx.moduleSystem = "cjs";
+
+    // Detect API frameworks from dependencies
+    const frameworkMap: Record<string, ApiFramework> = {
+      "@nestjs/core": "nestjs",
+      express: "express",
+      fastify: "fastify",
+      hono: "hono",
+      next: "nextjs",
+    };
+    for (const [dep, fw] of Object.entries(frameworkMap)) {
+      if (deps[dep]) ctx.apiFrameworks.push(fw);
+    }
   } catch {}
+
+  // Also walk src directory for patterns to detect framework
+  if (ctx.apiFrameworks.length === 0) {
+    try {
+      const entries = readdirSync(join(cwd, "src"), { withFileTypes: true });
+      const files = entries
+        .filter((e) => !e.isDirectory() && e.name.match(/\.(ts|js)$/))
+        .map((e) => join(cwd, "src", e.name));
+      for (const file of files.slice(0, 10)) {
+        // eslint-disable-next-line no-await-in-loop
+        const content = await Bun.file(file).text();
+        if (content.includes("@Controller(") || content.includes("@Module(")) {
+          ctx.apiFrameworks.push("nestjs");
+          break;
+        }
+        if (content.includes("Router()") || content.includes("app.get(")) {
+          ctx.apiFrameworks.push("express");
+        }
+      }
+    } catch {}
+  }
 
   // Find specs and test files via lightweight walk
   try {
@@ -113,9 +159,13 @@ export function contextPrompt(ctx: ProjectContext): string {
   lines.push(`- Test runner: ${ctx.testRunner}`);
   lines.push(`- Package manager: ${ctx.packageManager}`);
   lines.push(`- TypeScript: ${ctx.hasTsconfig ? "yes" : "no"}`);
+  lines.push(`- Module system: ${ctx.moduleSystem}`);
   lines.push(`- Source files: ${ctx.sourceFiles}`);
   lines.push(`- Existing test files: ${ctx.testFiles}`);
 
+  if (ctx.apiFrameworks.length > 0) {
+    lines.push(`- API frameworks: ${ctx.apiFrameworks.join(", ")}`);
+  }
   if (ctx.specs.length > 0) {
     lines.push(`- API specs found: ${ctx.specs.join(", ")}`);
   }

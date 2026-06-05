@@ -5,19 +5,21 @@
 ```sh
 src/
   index.ts              — Public API barrel exports
-  cli.ts                — CLI entry point (11 commands)
+  cli.ts                — CLI entry point (14 commands: discover, coverage, analyze, generate --existing)
   harness.ts            — SwagenHarness orchestrator
   cache.ts              — MemoryCache, FileCache, NoopCache
   storage.ts            — MemoryStorage, FileStorage, RedisStorage
-  context.ts            — Project context detection
-  indexer.ts            — Codebase indexing
+  context.ts            — Project context detection (API frameworks, module system)
+  indexer.ts            — Codebase indexing (entity/endpoint storage)
   orchestrator.ts       — Parallel agent execution
-  core/                 — spec, codegen, config, types, schema, prompts, postprocess
-  skills/               — manager, rest, graphql, grpc, soap (flat .ts files)
-  tools/                — index (11 AgentTools), state (run records)
+  core/                 — spec, codegen, config, types, schema, prompts, postprocess, augmenter
+  discovery/            — walker, extractor, framework detector, exporter
+  coverage/             — scanner, reporter
+  skills/               — manager, rest, graphql, grpc, soap, codebase (flat .ts files)
+  tools/                — index (16 AgentTools), state (run records)
   bot/                  — cloudflare, github, specs
   utils/                — errors, fmt
-tests/                  — 13 test files, 243 tests
+tests/                  — 17 test files, 308 tests (unit + integration)
 ```
 
 ## Key Conventions
@@ -31,8 +33,8 @@ tests/                  — 13 test files, 243 tests
 ## Build & Test
 
 ```bash
-bun tsc --noEmit   # typecheck
-bun test           # 243 tests
+bun tsc --noEmit   # typecheck (zero errors)
+bun test           # 308 tests
 bunx oxlint src/   # lint
 ```
 

@@ -17,6 +17,10 @@ export interface CodebaseIndex {
   testNames: string[];
   specPaths: string[];
   importGraph: Record<string, string[]>;
+  /** Entities discovered from source files (populated in codebase mode) */
+  entities?: Array<{ name: string; type: string; file: string; line: number }>;
+  /** Detected API endpoints from route patterns */
+  apiEndpoints?: Array<{ name: string; method: string; path: string }>;
 }
 
 const INDEX_VERSION = 1;
@@ -38,6 +42,29 @@ export async function buildIndex(cwd = process.cwd()): Promise<CodebaseIndex> {
 
   walkDir(cwd, cwd, files, testNames, specPaths, importGraph, 0);
 
+  // Extract entities from source files for codebase mode
+  const entities: CodebaseIndex["entities"] = [];
+  const apiEndpoints: CodebaseIndex["apiEndpoints"] = [];
+  try {
+    const { extractEntities } = await import("./discovery/extractor.ts");
+    const { detectRoutePatterns } = await import("./discovery/framework.ts");
+    for (const f of files) {
+      if (f.type === "source") {
+        try {
+          const content = readFileSync(join(cwd, f.path), "utf-8");
+          const ents = extractEntities(join(cwd, f.path), content);
+          for (const e of ents) {
+            entities.push({ name: e.name, type: e.type, file: f.path, line: e.line });
+          }
+          const routes = detectRoutePatterns(content);
+          for (const r of routes) {
+            apiEndpoints.push({ name: r.method, method: r.method, path: r.path });
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+
   const idx: CodebaseIndex = {
     version: INDEX_VERSION,
     createdAt: new Date().toISOString(),
@@ -46,7 +73,9 @@ export async function buildIndex(cwd = process.cwd()): Promise<CodebaseIndex> {
     testNames,
     specPaths,
     importGraph,
-  };
+  } as CodebaseIndex;
+  if (entities.length > 0) (idx as any).entities = entities;
+  if (apiEndpoints.length > 0) (idx as any).apiEndpoints = apiEndpoints;
 
   const dir = indexDir(cwd);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });

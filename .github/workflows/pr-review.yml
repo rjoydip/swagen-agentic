@@ -30,14 +30,14 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           submodules: false
 
       - uses: ./.github/actions/configure-git
 
       - name: Run Code Review
-        uses: anomalyco/opencode/github@385cb694419f98103af0e8fc6187ddcbcbb6eecb # v1.15.13
+        uses: anomalyco/opencode/github@6cb74317a6efacd656483cb0489d8e7e3701c12e # v1.16.0
         timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}

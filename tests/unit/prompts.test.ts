@@ -34,6 +34,11 @@ const MOCK_CONFIG: SwagenConfig = {
   aiModel: "claude-opus-4-5-20251101",
   storage: { backend: "memory" },
   cache: { strategy: "memory", ttlMs: 300_000, maxEntries: 256 },
+  mode: "spec",
+  discoveryPath: "src",
+  augment: false,
+  coverageThreshold: 0.7,
+  augmentStrategy: "smart-merge",
 };
 
 describe("BASE_SYSTEM_PROMPT", () => {

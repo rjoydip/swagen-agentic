@@ -29,7 +29,7 @@ Built on [`@earendil-works/pi-ai`](https://github.com/earendil-works/pi/tree/mai
 | **GitHub App server**   | Webhook-driven, real-time, multi-repo, improved error handling                             |
 | **Zero bloat**          | No chalk, commander, dedent, ora — all replaced by native Bun/Node utilities               |
 | **Audit trail**         | Every run persisted in `.swagen/runs/`                                                     |
-| **Full test suite**     | 129+ unit + integration tests with `bun test`                                              |
+| **Full test suite**     | 308+ unit + integration tests with `bun test`                                              |
 
 ---
 
@@ -42,9 +42,20 @@ swagen/
 │   │   ├── types.ts        — all domain types (no imports)
 │   │   ├── spec.ts         — spec loader + route analyzer
 │   │   ├── codegen.ts      — Bun/Vitest test file generator
-│   │   └── config.ts       — config file loader
+│   │   ├── config.ts       — config file loader
+│   │   └── augmenter.ts    — parseTestStructure, generateUnitTests, mergeTestFiles
+│   ├── discovery/
+│   │   ├── index.ts        — discoverCodebase: walk → classify → extract → return CodebaseAnalysis
+│   │   ├── walker.ts       — recursive file walk with skip rules
+│   │   ├── extractor.ts    — regex extraction of functions, classes, exports
+│   │   ├── framework.ts    — detect Express/Fastify/NestJS/Hono/Koa/Elysia/node:http/Next.js
+│   │   └── exporter.ts     — format discovery for agent prompts
+│   ├── coverage/
+│   │   ├── index.ts        — analyzeCoverage, generateCoverageReport, enrichAnalysisWithCoverage
+│   │   ├── scanner.ts      — scan test files for entity references
+│   │   └── reporter.ts     — build/format coverage reports, group gaps
 │   ├── tools/
-│   │   ├── index.ts        — 11 AgentTools with TypeBox schemas + cache
+│   │   ├── index.ts        — 16 AgentTools with TypeBox schemas + cache
 │   │   └── state.ts        — run record persistence (.swagen/runs/)
 │   ├── skills/             — swagen plugin modules (TypeScript)
 │   │   ├── manager.ts      — SkillManager: register, resolve, compose

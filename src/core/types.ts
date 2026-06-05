@@ -7,6 +7,68 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { OpenAPI } from "openapi-types";
 import type { ProjectContext } from "../context.ts";
 
+// ─── Codebase mode types ──────────────────────────────────────────────────────
+
+export type GenerateMode = "spec" | "codebase";
+
+export type ApiFramework =
+  | "express"
+  | "fastify"
+  | "nestjs"
+  | "hono"
+  | "nextjs"
+  | "koa"
+  | "elysia"
+  | "node:http"
+  | "unknown";
+
+export type CoverageLevel = "none" | "partial" | "low" | "full";
+
+export type AugmentStrategy = "smart-merge" | "append" | "separate";
+
+export interface SourceEntity {
+  type: "function" | "class" | "method" | "export" | "type" | "interface" | "variable";
+  name: string;
+  file: string;
+  line: number;
+  column: number;
+  signature?: string;
+  visibility?: "public" | "private" | "protected" | "exported" | "default";
+  isAsync: boolean;
+  isExported: boolean;
+  decorators?: string[];
+  jsDoc?: string;
+}
+
+export interface CodeDependency {
+  source: string;
+  target: string;
+  imports: string[];
+  isExternal: boolean;
+}
+
+export interface CoverageGap {
+  entity: SourceEntity;
+  coverage: CoverageLevel;
+  gapDescription: string;
+  existingTests: string[];
+}
+
+export interface CodebaseAnalysis {
+  entities: SourceEntity[];
+  dependencies: CodeDependency[];
+  coverageGaps: CoverageGap[];
+  entryPoints: string[];
+  apiEndpoints: SourceEntity[];
+  framework: ApiFramework;
+}
+
+export interface AugmentOptions {
+  strategy: AugmentStrategy;
+  preserveExisting: boolean;
+  respectConventions: boolean;
+}
+
 // ─── Spec source ──────────────────────────────────────────────────────────────
 
 export type SpecSource =
@@ -93,6 +155,7 @@ export interface SkillContext {
   config: SwagenConfig;
   endpoints: ResolvedEndpoint[];
   projectContext: ProjectContext;
+  codebaseAnalysis?: CodebaseAnalysis;
 }
 
 export interface SkillHook {
@@ -107,6 +170,11 @@ export interface SkillHook {
     result: { endpointCount: number; skippedCount: number },
     ctx: SkillContext,
   ) => Promise<GeneratedFile[]>;
+  /** Transform codebase analysis before generation */
+  beforeCodebaseGenerate?: (
+    analysis: CodebaseAnalysis,
+    ctx: SkillContext,
+  ) => Promise<CodebaseAnalysis>;
 }
 
 export interface Skill {
@@ -152,6 +220,16 @@ export interface SwagenConfig {
   cache: CacheConfig;
   /** User-defined skills to load */
   skills?: SkillConfigItem[];
+  /** Generation mode: spec-based or codebase-based */
+  mode: GenerateMode;
+  /** Root path for codebase discovery */
+  discoveryPath: string;
+  /** Whether to augment existing test files */
+  augment: boolean;
+  /** Minimum coverage threshold (0-1) */
+  coverageThreshold: number;
+  /** Strategy for augmenting existing tests */
+  augmentStrategy: AugmentStrategy;
 }
 
 export const DEFAULT_CONFIG: Partial<SwagenConfig> = {
@@ -168,6 +246,11 @@ export const DEFAULT_CONFIG: Partial<SwagenConfig> = {
   assertSchemas: false,
   testTimeoutMs: 10_000,
   dryRun: false,
+  mode: "spec",
+  discoveryPath: "src",
+  augment: false,
+  coverageThreshold: 0.7,
+  augmentStrategy: "smart-merge",
   storage: { backend: "memory" },
   cache: { strategy: "memory", ttlMs: 5 * 60_000, maxEntries: 256 },
 };

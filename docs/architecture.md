@@ -58,6 +58,11 @@ swagen is an **agentic application**: an LLM agent driven by `@earendil-works/pi
 │  read_file           — Bun.file().text()                   │
 │  get_run_history     — .swagen/runs/ glob                  │
 │  cache_stats         — ICache.stats()                      │
+│  discover_code       — discoverCodebase() + cache          │
+│  analyze_entity      — entity deep-dive + cache            │
+│  check_coverage      — scanCoverage() + cache              │
+│  read_existing_tests — parse existing test files           │
+│  augment_tests       — generateUnitTests() + mergeTestFiles│
 └───────────┬──────────────────────────┬─────────────────────┘
             │                          │
    ┌────────▼────────┐       ┌─────────▼──────────┐
@@ -66,6 +71,24 @@ swagen is an **agentic application**: an LLM agent driven by `@earendil-works/pi
    │  loadSpec()     │       │  generateTestFiles()│
    │  analyzeSpec()  │       │  renderTagFile()     │
    └─────────────────┘       └─────────────────────┘
+            │                          │
+            │                          ▼
+            │              ┌──────────────────────────┐
+            │              │  src/core/augmenter       │
+            │              │                           │
+            │              │  parseTestStructure()     │
+            │              │  generateUnitTests()      │
+            │              │  mergeTestFiles()         │
+            │              └──────────────────────────┘
+            │
+            ▼
+   ┌──────────────────┐
+   │  src/discovery/   │
+   │                   │
+   │  discoverCodebase │
+   │  extractEntities  │
+   │  detectFramework  │
+   └──────────────────┘
 ```
 
 ---
