@@ -6,6 +6,10 @@
  * import { MemoryCache, FileCache, withCache } from 'swagen/cache';
  */
 
+// ─── DI ───────────────────────────────────────────────────────────────────────
+export { buildContainer } from "./di.ts";
+export type { RunState } from "./di.ts";
+
 // ─── Harness (primary API) ────────────────────────────────────────────────────
 export { SwagenHarness } from "./harness.ts";
 export type { HarnessRunOptions, HarnessRunResult } from "./harness.ts";

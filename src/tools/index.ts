@@ -8,12 +8,7 @@ import { generateTestFiles } from "../core/codegen.ts";
 import { listRunRecords } from "./state.ts";
 import { withCache, cacheKey } from "../cache.ts";
 import type { ICache } from "../cache.ts";
-import type {
-  GeneratedFile,
-  ResolvedEndpoint,
-  SwagenConfig,
-  CodebaseAnalysis,
-} from "../core/types.ts";
+import type { GeneratedFile, ResolvedEndpoint, SwagenConfig } from "../core/types.ts";
 import { formatDuration } from "../utils/fmt.ts";
 import { discoverCodebase, formatDiscoveryPrompt } from "../discovery/index.ts";
 import { walkFiles, isTestFile } from "../discovery/walker.ts";
@@ -24,14 +19,7 @@ import {
   generateUnitTests,
   readTestFile,
 } from "../core/augmenter.ts";
-
-interface RunState {
-  spec?: Awaited<ReturnType<typeof loadSpec>>;
-  endpoints?: ResolvedEndpoint[];
-  generatedFiles?: GeneratedFile[];
-  codebaseAnalysis?: CodebaseAnalysis;
-  testFilePaths?: string[];
-}
+import type { RunState } from "../di.ts";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -49,25 +37,34 @@ function err(message: string): ToolResult {
   throw new Error(message);
 }
 
-function enrichWithCoverage(state: RunState): string[] {
-  if (!state.testFilePaths) {
-    state.testFilePaths = state.codebaseAnalysis?.testFilePaths ?? [];
+function enrichWithCoverage(runState: RunState): string[] {
+  if (!runState.codebaseAnalysis) {
+    throw new Error(
+      "Cannot enrich coverage: codebaseAnalysis not yet available. Run discover_codebase first.",
+    );
   }
-  if (state.testFilePaths.length === 0) {
+  if (!runState.testFilePaths) {
+    runState.testFilePaths = runState.codebaseAnalysis.testFilePaths ?? [];
+  }
+  if (runState.testFilePaths.length === 0) {
     const allFiles = walkFiles(process.cwd(), { maxDepth: 8 });
-    state.testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
+    runState.testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
   }
   const enriched = enrichAnalysisWithCoverage(
-    state.codebaseAnalysis!,
-    state.testFilePaths,
+    runState.codebaseAnalysis,
+    runState.testFilePaths,
     process.cwd(),
   );
-  state.codebaseAnalysis = enriched;
-  return state.testFilePaths;
+  runState.codebaseAnalysis = enriched;
+  return runState.testFilePaths;
 }
 
-export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any, any>[] {
-  const state: RunState = {};
+export function createTools(
+  config: SwagenConfig,
+  cache: ICache,
+  runState?: RunState,
+): AgentTool<any, any>[] {
+  const state: RunState = runState ?? {};
 
   // ── 1. validate_spec ──────────────────────────────────────────────────────
 

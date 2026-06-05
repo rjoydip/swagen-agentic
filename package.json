@@ -65,6 +65,7 @@
     "@apidevtools/swagger-parser": "^10.1.1",
     "@earendil-works/pi-agent-core": "^0.77.0",
     "@earendil-works/pi-ai": "^0.77.0",
+    "@inferdi/inferdi": "^4.0.8",
     "@octokit/rest": "^20.1.2",
     "@octokit/webhooks": "^13.9.1",
     "openapi-types": "^12.1.3",
