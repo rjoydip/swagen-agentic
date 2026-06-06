@@ -6,6 +6,10 @@
  * import { MemoryCache, FileCache, withCache } from 'swagen/cache';
  */
 
+// ─── DI ───────────────────────────────────────────────────────────────────────
+export { buildContainer } from "./di.ts";
+export type { RunState } from "./di.ts";
+
 // ─── Harness (primary API) ────────────────────────────────────────────────────
 export { SwagenHarness } from "./harness.ts";
 export type { HarnessRunOptions, HarnessRunResult } from "./harness.ts";
@@ -59,3 +63,24 @@ export type { Skill, SkillContext, SkillHook, SkillConfigItem } from "./core/typ
 
 // ─── Post-processing ──────────────────────────────────────────────────────────
 export { postProcessGeneratedFiles } from "./core/postprocess.ts";
+
+// ─── Discovery ─────────────────────────────────────────────────────────────────
+export { discoverCodebase, extractEntities, detectFramework } from "./discovery/index.ts";
+export type { DiscoveryOptions } from "./discovery/index.ts";
+export type { SourceEntity, CodebaseAnalysis, CoverageGap, CodeDependency } from "./core/types.ts";
+
+// ─── Coverage ──────────────────────────────────────────────────────────────────
+export {
+  analyzeCoverage,
+  generateCoverageReport,
+  enrichAnalysisWithCoverage,
+} from "./coverage/index.ts";
+export type { CoverageReport } from "./coverage/reporter.ts";
+
+// ─── Augmenter ─────────────────────────────────────────────────────────────────
+export {
+  generateUnitTests,
+  mergeTestFiles,
+  parseTestStructure,
+  analyzeTestPatterns,
+} from "./core/augmenter.ts";

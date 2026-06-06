@@ -25,7 +25,11 @@ import { generateTestFiles } from "./core/codegen.ts";
 import { splitAndGenerate } from "./orchestrator.ts";
 import type { HarnessRunResult } from "./harness.ts";
 import type { SwagenConfig } from "./core/types.ts";
-import { buildGeneratePrompt, buildValidatePrompt } from "./core/prompts.ts";
+import {
+  buildGeneratePrompt,
+  buildValidatePrompt,
+  buildCodebaseGeneratePrompt,
+} from "./core/prompts.ts";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 
@@ -36,55 +40,50 @@ const COMMANDS: CommandDef[] = [
   {
     name: "generate",
     args: "<spec>",
-    description: "Agentic test generation from a spec file or URL",
+    description:
+      "Agentic test generation from a spec file or URL. Use --existing for codebase mode.",
     flags: [
-      { flag: "--out-dir, -o <dir>", description: "Output directory (default: __tests__/api)" },
-      { flag: "--runner, -r <bun|vitest>", description: "Test runner (default: bun)" },
-      { flag: "--base-url <url>", description: "API base URL" },
-      { flag: "--include-tags <tags>", description: "Comma-separated tags to include" },
-      { flag: "--exclude-tags <tags>", description: "Comma-separated tags to exclude" },
-      { flag: "--skip <ids>", description: "Comma-separated operationIds to skip" },
-      { flag: "--dry-run", description: "Preview generated tests without writing" },
-      { flag: "--provider <name>", description: "AI provider (required)" },
-      { flag: "--model <id>", description: "Model id (required)" },
-      { flag: "--parallel <N>", description: "Split endpoints across N parallel agents" },
-      { flag: "--storage <backend>", description: "Session storage: memory|file|redis" },
-      { flag: "--verbose", description: "Stream all agent events to stderr" },
+      {
+        flag: "--existing",
+        description: "Enable codebase mode (discover existing code instead of spec)",
+      },
+      { flag: "--provider <name>", description: "AI provider (e.g. anthropic, openai)" },
+      { flag: "--model <id>", description: "AI model id" },
+      { flag: "--out-dir, -o <dir>", description: "Output directory for generated tests" },
+      { flag: "--runner, -r <name>", description: "Test runner (bun or vitest)" },
+      { flag: "--dry-run", description: "Preview generated files without writing them" },
+      { flag: "--parallel <N>", description: "Run N parallel agents" },
+      { flag: "--verbose", description: "Stream all agent events" },
+      { flag: "--augment", description: "Augment existing test files" },
+      {
+        flag: "--augment-strategy <s>",
+        description: "Augmentation strategy (smart-merge, append, separate)",
+      },
     ],
     examples: [
-      { cmd: "swagen generate openapi.yaml", desc: "Generate from a local spec" },
-      {
-        cmd: "swagen generate https://petstore.swagger.io/v3/openapi.json",
-        desc: "Generate from a URL",
-      },
-      { cmd: "swagen generate openapi.yaml --dry-run", desc: "Preview without writing" },
-      { cmd: "swagen generate openapi.yaml --parallel 3", desc: "Split endpoints across 3 agents" },
+      { cmd: "swagen generate openapi.yaml", desc: "Generate tests from spec" },
+      { cmd: "swagen generate --existing src/", desc: "Generate tests for existing codebase" },
     ],
   },
   {
     name: "run",
     args: "<spec>",
-    description: "Generate tests then immediately run them",
+    description:
+      "Generate and then execute tests in a single pass. Accepts same flags as generate.",
     flags: [
+      { flag: "--existing", description: "Enable codebase mode" },
+      { flag: "--provider <name>", description: "AI provider" },
+      { flag: "--model <id>", description: "AI model id" },
       { flag: "--out-dir, -o <dir>", description: "Output directory" },
-      { flag: "--runner, -r <bun|vitest>", description: "Test runner" },
-      { flag: "--base-url <url>", description: "API base URL" },
-      { flag: "--provider <name>", description: "AI provider (required)" },
-      { flag: "--model <id>", description: "Model id (required)" },
-      { flag: "--parallel <N>", description: "Split across N parallel agents" },
-      { flag: "--verbose", description: "Stream all agent events" },
+      { flag: "--runner, -r <name>", description: "Test runner" },
+      { flag: "--dry-run", description: "Preview only" },
+      { flag: "--parallel <N>", description: "Run N parallel agents" },
     ],
-    examples: [{ cmd: "swagen run openapi.yaml", desc: "Generate and run tests" }],
   },
   {
     name: "validate",
     args: "<spec>",
-    description: "Validate a spec without generating tests",
-    flags: [
-      { flag: "--provider <name>", description: "AI provider (required)" },
-      { flag: "--model <id>", description: "Model id (required)" },
-    ],
-    examples: [{ cmd: "swagen validate openapi.yaml", desc: "Validate spec via agent" }],
+    description: "Validate an OpenAPI spec without generating tests.",
   },
   {
     name: "resume",
@@ -148,6 +147,10 @@ const COMMANDS: CommandDef[] = [
       { cmd: "swagen bench openapi.yaml --iterations 10", desc: "Run 10 benchmark iterations" },
     ],
   },
+  { name: "discover", args: "[dir]", description: "Discover and display project code structure" },
+  { name: "coverage", args: "[dir]", description: "Show existing test coverage gaps" },
+  { name: "analyze", args: "<entity>", description: "Deep analysis of a code entity" },
+  { name: "help", args: "", description: "Show this help" },
 ];
 
 const COMMAND_MAP = new Map(COMMANDS.map((c) => [c.name, c]));
@@ -205,6 +208,12 @@ async function main() {
       return cmdBench(positionals[0], config, flags);
     case "init":
       return cmdInit();
+    case "discover":
+      return cmdDiscover(positionals[0]);
+    case "coverage":
+      return cmdCoverage(positionals[0]);
+    case "analyze":
+      return cmdAnalyze(positionals[0]);
     default:
       process.stderr.write(ansi.red(`Unknown command: ${command}\n`));
       printHelp(COMMANDS, VERSION);
@@ -220,8 +229,19 @@ async function cmdGenerate(
   flags: Record<string, string | boolean>,
   andRun: boolean,
 ) {
+  if (flags["existing"]) {
+    config.mode = "codebase";
+    // --existing src/ sets discoveryPath; --existing (boolean) falls back to spec positional
+    if (typeof flags["existing"] === "string") {
+      config.discoveryPath = flags["existing"];
+    } else if (spec) {
+      config.discoveryPath = spec;
+    }
+    return cmdCodebaseGenerate(config, andRun);
+  }
+
   if (!spec) {
-    process.stderr.write(ansi.red("Error: <spec> argument is required\n"));
+    process.stderr.write(ansi.red("Error: <spec> argument is required (or use --existing)\n"));
     process.exit(1);
   }
 
@@ -305,10 +325,7 @@ async function cmdGenerate(
       process.stdout.write(ansi.gray("─".repeat(60)) + "\n");
     }
 
-    const stats = harness.cacheStats();
-    if (stats.hits + stats.misses > 0) {
-      process.stdout.write(ansi.gray(`Cache: ${stats.hits} hits / ${stats.misses} misses\n`));
-    }
+    showCacheStats(harness);
   } catch (err) {
     spinner.fail(friendlyError(err));
     process.exit(1);
@@ -517,7 +534,158 @@ async function cmdBench(
   );
 }
 
+// ─── discover ──────────────────────────────────────────────────────────────────
+
+async function cmdDiscover(dir: string | undefined) {
+  const { discoverCodebase, formatDiscoveryPrompt, formatEntitySummary } =
+    await import("./discovery/index.ts");
+  const cwd = dir ? join(process.cwd(), dir) : process.cwd();
+  const spinner = createSpinner(`Discovering code in ${cwd}...`);
+  try {
+    const analysis = discoverCodebase({ ...(dir ? { discoveryPath: dir } : {}) });
+    spinner.succeed(`Found ${analysis.entities.length} entities, framework: ${analysis.framework}`);
+    process.stdout.write("\n" + formatDiscoveryPrompt(analysis) + "\n");
+    if (analysis.entities.length > 0) {
+      process.stdout.write("\n" + ansi.bold("Entities:") + "\n");
+      process.stdout.write(formatEntitySummary(analysis.entities, 30) + "\n");
+      if (analysis.entities.length > 30) {
+        process.stdout.write(ansi.gray(`  ... and ${analysis.entities.length - 30} more\n`));
+      }
+    }
+  } catch (err) {
+    spinner.fail(friendlyError(err));
+    process.exit(1);
+  }
+}
+
+// ─── coverage ──────────────────────────────────────────────────────────────────
+
+async function cmdCoverage(dir: string | undefined) {
+  const { discoverCodebase } = await import("./discovery/index.ts");
+  const { generateCoverageReport, enrichAnalysisWithCoverage } =
+    await import("./coverage/index.ts");
+
+  const cwd = dir ? join(process.cwd(), dir) : process.cwd();
+  const spinner = createSpinner(`Analyzing coverage in ${cwd}...`);
+  try {
+    const analysis = discoverCodebase({
+      ...(dir ? { discoveryPath: dir } : {}),
+      testPath: ".",
+    });
+    const testFilePaths = analysis.testFilePaths ?? [];
+    const enriched = enrichAnalysisWithCoverage(analysis, testFilePaths, cwd);
+    const report = generateCoverageReport(enriched, testFilePaths, cwd);
+    spinner.succeed(
+      `Coverage: ${enriched.coverageGaps.filter((g) => g.coverage === "none").length} uncovered entities`,
+    );
+    process.stdout.write("\n" + report + "\n");
+  } catch (err) {
+    spinner.fail(friendlyError(err));
+    process.exit(1);
+  }
+}
+
+// ─── analyze ──────────────────────────────────────────────────────────────────
+
+async function cmdAnalyze(entity: string | undefined) {
+  if (!entity) {
+    process.stderr.write(ansi.red("Error: <entity> argument is required\n"));
+    process.exit(1);
+  }
+
+  const { discoverCodebase } = await import("./discovery/index.ts");
+  const { enrichAnalysisWithCoverage } = await import("./coverage/index.ts");
+
+  const spinner = createSpinner(`Analyzing entity "${entity}"...`);
+  try {
+    const analysis = discoverCodebase({ testPath: "." });
+    const testFilePaths = analysis.testFilePaths ?? [];
+    const enriched = enrichAnalysisWithCoverage(analysis, testFilePaths, process.cwd());
+
+    const candidates = enriched.entities.filter(
+      (e) => e.name === entity || e.name.toLowerCase() === entity.toLowerCase(),
+    );
+
+    if (candidates.length === 0) {
+      spinner.fail(`Entity "${entity}" not found`);
+      process.exit(1);
+    }
+
+    spinner.succeed(`Found ${candidates.length} match(es) for "${entity}"`);
+    for (const e of candidates) {
+      process.stdout.write(ansi.bold(`\n${e.type}: ${e.name}\n`));
+      process.stdout.write(`  File:     ${e.file}:${e.line}\n`);
+      process.stdout.write(`  Exported: ${e.isExported}\n`);
+      if (e.isAsync) process.stdout.write(`  Async:    yes\n`);
+      if (e.signature) process.stdout.write(`  Signature: ${e.signature}\n`);
+      if (e.decorators?.length) process.stdout.write(`  Decorators: ${e.decorators.join(", ")}\n`);
+
+      const gaps = enriched.coverageGaps.filter((g) => g.entity.name === e.name);
+      if (gaps.length > 0) {
+        const gap = gaps[0]!;
+        process.stdout.write(`  Coverage: ${ansi.yellow(gap.coverage)} — ${gap.gapDescription}\n`);
+        if (gap.existingTests.length > 0) {
+          process.stdout.write(
+            `  Tests referencing: ${gap.existingTests.slice(0, 5).join(", ")}\n`,
+          );
+        }
+      } else {
+        process.stdout.write(ansi.green(`  Coverage: full\n`));
+      }
+    }
+  } catch (err) {
+    spinner.fail(friendlyError(err));
+    process.exit(1);
+  }
+}
+
+// ─── codebase generate ─────────────────────────────────────────────────────────
+
+async function cmdCodebaseGenerate(config: SwagenConfig, andRun: boolean) {
+  const harness = await SwagenHarness.create(config);
+  const spinner = createSpinner("Agent is analyzing codebase...");
+  const startTime = Date.now();
+
+  const prompt = buildCodebaseGeneratePrompt(config, andRun);
+
+  try {
+    const gen = harness.run({ prompt, persist: !config.dryRun });
+    let result: IteratorResult<
+      import("@earendil-works/pi-agent-core").AgentEvent,
+      HarnessRunResult
+    >;
+    do {
+      // eslint-disable-next-line no-await-in-loop
+      result = await gen.next();
+    } while (!result.done);
+    const runResult = result.value as HarnessRunResult;
+
+    spinner.succeed(`Done in ${formatDuration(Date.now() - startTime)}`);
+
+    // Show generated file summary
+    if (runResult.generatedFileContents.length > 0) {
+      process.stdout.write("\n" + ansi.bold("Generated files:") + "\n");
+      for (const f of runResult.generatedFileContents) {
+        process.stdout.write(ansi.gray(`  ${f.path}`) + ansi.gray(` (${f.tests} tests)\n`));
+      }
+      process.stdout.write("\n");
+    }
+
+    showCacheStats(harness);
+  } catch (err) {
+    spinner.fail(friendlyError(err));
+    process.exit(1);
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function showCacheStats(harness: SwagenHarness) {
+  const stats = harness.cacheStats();
+  if (stats.hits + stats.misses > 0) {
+    process.stdout.write(ansi.gray(`Cache: ${stats.hits} hits / ${stats.misses} misses\n`));
+  }
+}
 
 function flagsToConfig(flags: Record<string, string | boolean>): Partial<SwagenConfig> {
   const c: Partial<SwagenConfig> = {};
@@ -534,6 +702,12 @@ function flagsToConfig(flags: Record<string, string | boolean>): Partial<SwagenC
   if (typeof flags["model"] === "string") c.aiModel = flags["model"];
   if (typeof flags["storage"] === "string")
     c.storage = { backend: flags["storage"] as SwagenConfig["storage"]["backend"] };
+  if (flags["existing"]) c.mode = "codebase";
+  if (flags["augment"]) c.augment = true;
+  if (flags["augment-strategy"])
+    c.augmentStrategy = flags["augment-strategy"] as SwagenConfig["augmentStrategy"];
+  if (flags["coverage-threshold"])
+    c.coverageThreshold = parseFloat(flags["coverage-threshold"] as string);
   return c;
 }
 

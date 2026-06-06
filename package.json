@@ -65,6 +65,7 @@
     "@apidevtools/swagger-parser": "^10.1.1",
     "@earendil-works/pi-agent-core": "^0.77.0",
     "@earendil-works/pi-ai": "^0.77.0",
+    "@inferdi/inferdi": "^4.0.8",
     "@octokit/rest": "^20.1.2",
     "@octokit/webhooks": "^13.9.1",
     "openapi-types": "^12.1.3",
@@ -76,12 +77,12 @@
     "actions-up": "^1.14.2",
     "bun-types": "^1.3.14",
     "changelogen": "^0.6.2",
-    "fallow": "^2.88.1",
+    "fallow": "^2.88.3",
     "oxfmt": "^0.52.0",
     "oxlint": "^1.68.0",
     "simple-git-hooks": "^2.13.1",
     "typescript": "^5.9.3",
-    "wrangler": "^4.97.0"
+    "wrangler": "^4.98.0"
   },
   "simple-git-hooks": {
     "pre-commit": "bun run lint && bun run typecheck && bun run fallow && bun run actions-up && bun run fallow:health"

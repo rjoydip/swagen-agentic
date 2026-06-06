@@ -37,7 +37,7 @@ jobs:
       - uses: ./.github/actions/configure-git
 
       - name: Run Code Review
-        uses: anomalyco/opencode/github@385cb694419f98103af0e8fc6187ddcbcbb6eecb # v1.15.13
+        uses: anomalyco/opencode/github@6cb74317a6efacd656483cb0489d8e7e3701c12e # v1.16.0
         timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}

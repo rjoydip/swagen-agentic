@@ -24,15 +24,20 @@ import {
 } from "@earendil-works/pi-agent-core";
 import { getModel, type Model } from "@earendil-works/pi-ai";
 
-import { createStorage, newSession as makeSession } from "./storage.ts";
-import { createCache } from "./cache.ts";
-import { createTools } from "./tools/index.ts";
+import type { Container } from "@inferdi/inferdi";
+import { buildContainer } from "./di.ts";
+import { newSession as makeSession } from "./storage.ts";
 import { saveRunRecord } from "./tools/state.ts";
 import { detectContext, contextPrompt } from "./context.ts";
-import { SkillManager } from "./skills/manager.ts";
-import { BASE_SYSTEM_PROMPT, buildSkillSystemPrompt } from "./core/prompts.ts";
+import {
+  BASE_SYSTEM_PROMPT,
+  CODEBASE_SYSTEM_PROMPT,
+  buildSkillSystemPrompt,
+} from "./core/prompts.ts";
 import type { IStorage } from "./storage.ts";
 import type { ICache } from "./cache.ts";
+import { createTools } from "./tools/index.ts";
+import { SkillManager } from "./skills/manager.ts";
 import type { Session, SwagenConfig, RunRecord, SkillHook, SkillContext } from "./core/types.ts";
 import type { ResolvedEndpoint, GeneratedFile } from "./core/types.ts";
 import { checkApiKey } from "./utils/errors.ts";
@@ -69,6 +74,7 @@ export class SwagenHarness {
   readonly storage: IStorage;
   readonly cache: ICache;
   readonly skillManager: SkillManager | null;
+  readonly container: Container<any> | null;
 
   activeHooks: SkillHook[] = [];
 
@@ -76,23 +82,34 @@ export class SwagenHarness {
     config: SwagenConfig,
     storage: IStorage,
     cache: ICache,
-    skillManager: SkillManager | null = null,
+    skillManager?: SkillManager | null,
+  );
+  constructor(container: Container<any>);
+  constructor(
+    configOrContainer: SwagenConfig | Container<any>,
+    storage?: IStorage,
+    cache?: ICache,
+    skillManager?: SkillManager | null,
   ) {
-    this.config = config;
-    this.storage = storage;
-    this.cache = cache;
-    this.skillManager = skillManager;
+    if (configOrContainer && typeof (configOrContainer as any).get === "function") {
+      const c = configOrContainer as unknown as Container<any>;
+      this.container = c;
+      this.config = c.get("config");
+      this.storage = c.get("storage");
+      this.cache = c.get("cache");
+      this.skillManager = c.get("skillManager");
+    } else {
+      this.container = null;
+      this.config = configOrContainer as SwagenConfig;
+      this.storage = storage!;
+      this.cache = cache!;
+      this.skillManager = skillManager ?? null;
+    }
   }
 
   static async create(config: SwagenConfig): Promise<SwagenHarness> {
-    const storage = createStorage(config.storage);
-    const cache = createCache(config.cache);
-
-    const skillManager = new SkillManager();
-    await skillManager.registerBuiltins();
-    await skillManager.loadUserSkills(config);
-
-    return new SwagenHarness(config, storage, cache, skillManager);
+    const container = await buildContainer(config);
+    return new SwagenHarness(container);
   }
 
   // ── Session management ───────────────────────────────────────────────────
@@ -154,8 +171,8 @@ export class SwagenHarness {
       projectContext: projectCtx,
     };
 
-    let tools = createTools(this.config, this.cache);
-    let baseSystem = BASE_SYSTEM_PROMPT;
+    let tools = this.container?.get("tools") ?? createTools(this.config, this.cache);
+    let baseSystem = this.config.mode === "codebase" ? CODEBASE_SYSTEM_PROMPT : BASE_SYSTEM_PROMPT;
 
     if (this.skillManager) {
       const { active, inactive } = this.skillManager.resolve(skillCtx);
@@ -164,7 +181,7 @@ export class SwagenHarness {
       if (active.length > 0) {
         logger.info("skills", `Active: ${active.map((s) => s.name).join(", ")}`);
         baseSystem = buildSkillSystemPrompt(
-          BASE_SYSTEM_PROMPT,
+          baseSystem,
           active.map((s) => s.systemPrompt).filter(Boolean) as string[],
         );
         const skillTools = this.skillManager.collectTools(active);

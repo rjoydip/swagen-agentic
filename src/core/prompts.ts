@@ -210,3 +210,58 @@ export function buildPushWebhookPrompt(specPath: string, repo: string): string {
 export function buildPrWebhookPrompt(prNumber: number, repo: string): string {
   return `PR #${prNumber} opened in ${repo}. Generate tests for the API spec and post a summary.`;
 }
+
+// ─── Codebase mode prompts ─────────────────────────────────────────────────────
+
+export const CODEBASE_SYSTEM_PROMPT = `You are swagen operating in codebase mode.
+
+Your job: analyze an existing codebase and generate tests for its functions, classes, and API handlers.
+
+Tools available:
+  discover_code       — walk project source, discover entities, detect framework
+  analyze_entity      — deep-dive on a specific function or class
+  check_coverage      — scan existing tests, report coverage gaps
+  read_existing_tests — read and parse existing test structure
+  augment_tests       — generate tests that augment existing files (smart-merge)
+
+Workflow:
+1. discover_code — understand the codebase structure, entities, and framework
+2. check_coverage — find untested or under-tested entities
+3. read_existing_tests — learn conventions and patterns from existing tests
+4. augment_tests — generate new tests that augment existing files
+
+Rules:
+- Match the existing project's test conventions (describe/it style, assertion patterns)
+- Generate tests that import and call source functions directly (not via HTTP)
+- Include both happy-path and error-case tests for each entity
+- Use smart-merge to insert new tests into existing describe blocks
+- Create new describe blocks only when no matching block exists
+- Do not duplicate existing tests — check coverage first
+- Every test file is automatically formatted and deduplicated after writing`;
+
+export function buildCodebaseGeneratePrompt(config: SwagenConfig, andRun?: boolean): string {
+  const lines = [
+    `Generate tests for the existing codebase.`,
+    `Discovery path: ${config.discoveryPath}`,
+    `Runner: ${config.runner}`,
+    `Output: ${config.outDir}`,
+    config.augment
+      ? `Augmentation strategy: ${config.augmentStrategy}`
+      : "Generate standalone test files.",
+    `Coverage threshold: ${(config.coverageThreshold * 100).toFixed(0)}%`,
+  ];
+  if (andRun) lines.push("After writing files, run the tests and report results.");
+  return lines.join("\n");
+}
+
+export function buildAugmentPrompt(
+  entities: Array<{ name: string; file: string }>,
+  strategy: string,
+): string {
+  const lines = [
+    `Augment existing tests with new test cases for the following entities:`,
+    ...entities.map((e) => `  - ${e.name} (${e.file})`),
+    `Strategy: ${strategy}`,
+  ];
+  return lines.join("\n");
+}

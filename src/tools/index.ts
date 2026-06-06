@@ -1,7 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 import { loadSpec, analyzeSpec } from "../core/spec.ts";
 import { generateTestFiles } from "../core/codegen.ts";
@@ -10,13 +10,16 @@ import { withCache, cacheKey } from "../cache.ts";
 import type { ICache } from "../cache.ts";
 import type { GeneratedFile, ResolvedEndpoint, SwagenConfig } from "../core/types.ts";
 import { formatDuration } from "../utils/fmt.ts";
-import { logger } from "../utils/logger.ts";
-
-interface RunState {
-  spec?: Awaited<ReturnType<typeof loadSpec>>;
-  endpoints?: ResolvedEndpoint[];
-  generatedFiles?: GeneratedFile[];
-}
+import { discoverCodebase, formatDiscoveryPrompt } from "../discovery/index.ts";
+import { walkFiles, isTestFile } from "../discovery/walker.ts";
+import { enrichAnalysisWithCoverage, generateCoverageReport } from "../coverage/index.ts";
+import {
+  analyzeTestPatterns,
+  mergeTestFiles,
+  generateUnitTests,
+  readTestFile,
+} from "../core/augmenter.ts";
+import type { RunState } from "../di.ts";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -34,8 +37,34 @@ function err(message: string): ToolResult {
   throw new Error(message);
 }
 
-export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any, any>[] {
-  const state: RunState = {};
+function enrichWithCoverage(runState: RunState): string[] {
+  if (!runState.codebaseAnalysis) {
+    throw new Error(
+      "Cannot enrich coverage: codebaseAnalysis not yet available. Run discover_codebase first.",
+    );
+  }
+  if (!runState.testFilePaths) {
+    runState.testFilePaths = runState.codebaseAnalysis.testFilePaths ?? [];
+  }
+  if (runState.testFilePaths.length === 0) {
+    const allFiles = walkFiles(process.cwd(), { maxDepth: 8 });
+    runState.testFilePaths = allFiles.filter((f) => isTestFile(f.path)).map((f) => f.absPath);
+  }
+  const enriched = enrichAnalysisWithCoverage(
+    runState.codebaseAnalysis,
+    runState.testFilePaths,
+    process.cwd(),
+  );
+  runState.codebaseAnalysis = enriched;
+  return runState.testFilePaths;
+}
+
+export function createTools(
+  config: SwagenConfig,
+  cache: ICache,
+  runState?: RunState,
+): AgentTool<any, any>[] {
+  const state: RunState = runState ?? {};
 
   // ── 1. validate_spec ──────────────────────────────────────────────────────
 
@@ -415,11 +444,11 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
               }
             }
           } catch (e) {
-            logger.warn("search", `Failed to read ${file}: ${e}`);
+            console.warn(`search: Failed to read ${file}: ${e}`);
           }
         }
       } catch (e) {
-        logger.warn("search", `Glob scan error: ${e}`);
+        console.warn(`search: Glob scan error: ${e}`);
       }
       if (results.length === 0) return ok({ message: "No matches found.", results: [] });
       return ok({ matchCount: results.length, results });
@@ -481,11 +510,11 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
               await Bun.write(file, replaced);
             }
           } catch (e) {
-            logger.warn("replace", `Failed to process ${file}: ${e}`);
+            console.warn(`replace: Failed to process ${file}: ${e}`);
           }
         }
       } catch (e) {
-        logger.warn("replace", `Glob scan error: ${e}`);
+        console.warn(`replace: Glob scan error: ${e}`);
       }
 
       if (changes.length === 0)
@@ -499,11 +528,191 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
     },
   };
 
-  // ── 12. task_complete ─────────────────────────────────────────────────────
-  //
-  // Signals that the agent has finished its work. The LLM should call this
-  // when it believes all requested tests have been generated and written.
-  // Providing a clear summary helps produce a better final report.
+  // ── 12. discover_code ─────────────────────────────────────────────────────
+
+  const discoverCode: AgentTool<any, any> = {
+    name: "discover_code",
+    label: "Discover Code",
+    description:
+      "Walk the project source and discover functions, classes, exports, API handlers, and framework. Returns a summary of what was found.",
+    parameters: Type.Object({
+      discoveryPath: Type.Optional(
+        Type.String({ description: "Root path for discovery. Default: src." }),
+      ),
+    }),
+    async execute(_id: string, params: unknown) {
+      const { discoveryPath } = params as { discoveryPath?: string };
+      const analysis = discoverCodebase({ ...(discoveryPath ? { discoveryPath } : {}) });
+      state.codebaseAnalysis = analysis;
+
+      return ok(
+        {
+          entityCount: analysis.entities.length,
+          functions: analysis.entities.filter((e) => e.type === "function").length,
+          classes: analysis.entities.filter((e) => e.type === "class").length,
+          exports: analysis.entities.filter((e) => e.isExported).length,
+          apiEndpoints: analysis.apiEndpoints.length,
+          entryPoints: analysis.entryPoints,
+          framework: analysis.framework,
+          summary: formatDiscoveryPrompt(analysis),
+          entities: analysis.entities.map((e) => ({
+            name: e.name,
+            type: e.type,
+            file: e.file,
+            line: e.line,
+            isExported: e.isExported,
+          })),
+        },
+        { entityCount: analysis.entities.length },
+      );
+    },
+  };
+
+  // ── 13. analyze_entity ────────────────────────────────────────────────────
+
+  const analyzeEntity: AgentTool<any, any> = {
+    name: "analyze_entity",
+    label: "Analyze Entity",
+    description:
+      "Deep-dive on a specific function or class: signature, body, dependencies, and existing test coverage.",
+    parameters: Type.Object({
+      name: Type.String({ description: "Entity name to analyze." }),
+      file: Type.Optional(Type.String({ description: "Optional file path to narrow search." })),
+    }),
+    async execute(_id: string, params: unknown) {
+      const { name, file } = params as { name: string; file?: string };
+      if (!state.codebaseAnalysis) {
+        // Auto-discover if not yet done
+        state.codebaseAnalysis = discoverCodebase();
+      }
+
+      let candidates = state.codebaseAnalysis.entities.filter(
+        (e) => e.name === name || e.name.toLowerCase() === name.toLowerCase(),
+      );
+      if (file) candidates = candidates.filter((e) => e.file === file);
+
+      if (candidates.length === 0) err(`Entity "${name}" not found in codebase.`);
+
+      const entity = candidates[0]!;
+      return ok(
+        {
+          entity: {
+            name: entity.name,
+            type: entity.type,
+            file: entity.file,
+            line: entity.line,
+            signature: entity.signature,
+            isAsync: entity.isAsync,
+            isExported: entity.isExported,
+            decorators: entity.decorators,
+            jsDoc: entity.jsDoc,
+          },
+          coverage: state.codebaseAnalysis.coverageGaps
+            .filter((g) => g.entity.name === entity.name)
+            .map((g) => ({ coverage: g.coverage, description: g.gapDescription })),
+        },
+        { found: true },
+      );
+    },
+  };
+
+  // ── 14. check_coverage ───────────────────────────────────────────────────
+
+  const checkCoverage: AgentTool<any, any> = {
+    name: "check_coverage",
+    label: "Check Coverage",
+    description:
+      "Scan existing test files against discovered source entities. Returns coverage gaps: untested, low coverage, or partial coverage.",
+    parameters: Type.Object({
+      maxGapLevel: Type.Optional(
+        Type.Union([Type.Literal("none"), Type.Literal("low"), Type.Literal("partial")], {
+          description: "Maximum gap level to report. Default: partial (all gaps except full).",
+        }),
+      ),
+    }),
+    async execute(_id: string, params: unknown) {
+      const { maxGapLevel = "partial" } = params as {
+        maxGapLevel?: "none" | "low" | "partial";
+      };
+      if (!state.codebaseAnalysis) {
+        state.codebaseAnalysis = discoverCodebase();
+      }
+
+      const gapLevels: Record<string, number> = { none: 0, low: 1, partial: 2, full: 3 };
+
+      const testFilePaths = enrichWithCoverage(state);
+
+      const filteredGaps = state.codebaseAnalysis.coverageGaps.filter(
+        (g) => (gapLevels[g.coverage] ?? 0) <= (gapLevels[maxGapLevel] ?? 2),
+      );
+
+      const report = generateCoverageReport(state.codebaseAnalysis, testFilePaths, process.cwd(), {
+        skipFallback: true,
+      });
+
+      return ok(
+        {
+          totalEntities: state.codebaseAnalysis.entities.length,
+          totalGaps: filteredGaps.length,
+          gaps: filteredGaps.map((g) => ({
+            name: g.entity.name,
+            type: g.entity.type,
+            file: g.entity.file,
+            line: g.entity.line,
+            coverage: g.coverage,
+            description: g.gapDescription,
+          })),
+          report,
+        },
+        { totalGaps: filteredGaps.length },
+      );
+    },
+  };
+
+  // ── 15. read_existing_tests ──────────────────────────────────────────────
+
+  const readExistingTests: AgentTool<any, any> = {
+    name: "read_existing_tests",
+    label: "Read Existing Tests",
+    description:
+      "Read and parse existing test files to understand their structure, conventions, describe blocks, and test patterns.",
+    parameters: Type.Object({
+      path: Type.Optional(Type.String({ description: "Specific test file path to read." })),
+      maxFiles: Type.Optional(
+        Type.Number({ description: "Max test files to analyze. Default: 10." }),
+      ),
+    }),
+    async execute(_id: string, params: unknown) {
+      const { path, maxFiles = 10 } = params as { path?: string; maxFiles?: number };
+
+      if (path) {
+        const structure = readTestFile(path);
+        if (!structure) err(`Test file not found: ${path}`);
+        return ok({
+          file: path,
+          conventions: structure!.conventions,
+          blocks: structure!.blocks.map((b) => ({
+            type: b.type,
+            name: b.name,
+            children: b.children.map((c) => ({ type: c.type, name: c.name })),
+          })),
+        });
+      }
+
+      // Auto-discover test files
+      const allTestFiles = walkFiles(process.cwd(), { maxDepth: 8 });
+      const testFilesFiltered = allTestFiles.filter((f) => isTestFile(f.path)).slice(0, maxFiles);
+      const conventions = analyzeTestPatterns(testFilesFiltered.map((f) => f.path));
+
+      return ok({
+        conventions,
+        fileCount: testFilesFiltered.length,
+        files: testFilesFiltered.map((f) => f.path),
+      });
+    },
+  };
+
+  // ── 17. task_complete ─────────────────────────────────────────────────────
 
   const taskComplete: AgentTool<any, any> = {
     name: "task_complete",
@@ -535,6 +744,82 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
     },
   };
 
+  // ── 16. augment_tests ────────────────────────────────────────────────────
+
+  const augmentTests: AgentTool<any, any> = {
+    name: "augment_tests",
+    label: "Augment Tests",
+    description:
+      "Generate new test cases that augment existing test files. Optionally specify target entities or files.",
+    parameters: Type.Object({
+      strategy: Type.Optional(
+        Type.Union(
+          [Type.Literal("smart-merge"), Type.Literal("append"), Type.Literal("separate")],
+          { description: "Augmentation strategy. Default: smart-merge." },
+        ),
+      ),
+      targetEntities: Type.Optional(
+        Type.Array(Type.String(), { description: "Specific entities to test. Empty = all." }),
+      ),
+      notes: Type.Optional(
+        Type.String({ description: "Your reasoning about what to generate and why." }),
+      ),
+    }),
+    async execute(_id: string, params: unknown) {
+      const args = params as {
+        strategy?: "smart-merge" | "append" | "separate";
+        targetEntities?: string[];
+        notes?: string;
+      };
+      const strategy = args.strategy ?? config.augmentStrategy;
+
+      if (!state.codebaseAnalysis) {
+        state.codebaseAnalysis = discoverCodebase();
+      }
+
+      const testFilePaths = enrichWithCoverage(state);
+
+      // Filter to target entities if specified
+      let targetEntities = state.codebaseAnalysis.entities;
+      if (args.targetEntities?.length) {
+        targetEntities = state.codebaseAnalysis.entities.filter((e) =>
+          args.targetEntities!.includes(e.name),
+        );
+      }
+
+      // Detect conventions from existing tests
+      const conventions = analyzeTestPatterns(testFilePaths.map((f) => relative(process.cwd(), f)));
+
+      // Generate unit tests for target entities
+      const generatedFiles = generateUnitTests(
+        targetEntities,
+        config,
+        conventions,
+        config.discoveryPath,
+      );
+
+      // Merge with existing test files (relativePath already includes outDir)
+      const mergedFiles = mergeTestFiles(generatedFiles, process.cwd(), strategy);
+
+      state.generatedFiles = mergedFiles;
+
+      return ok(
+        {
+          fileCount: mergedFiles.length,
+          totalTests: mergedFiles.reduce((s, f) => s + f.testCount, 0),
+          strategy,
+          files: mergedFiles.map((f) => ({
+            path: f.relativePath,
+            tests: f.testCount,
+            content: f.content.slice(0, 500) + "...", // preview
+          })),
+          notes: args.notes,
+        },
+        { fileCount: mergedFiles.length },
+      );
+    },
+  };
+
   return [
     validateSpec,
     loadSpecTool,
@@ -547,6 +832,11 @@ export function createTools(config: SwagenConfig, cache: ICache): AgentTool<any,
     cacheStats,
     searchFiles,
     replaceInFiles,
+    discoverCode,
+    analyzeEntity,
+    checkCoverage,
+    readExistingTests,
+    augmentTests,
     taskComplete,
   ];
 }

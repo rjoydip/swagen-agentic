@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import {
   BASE_SYSTEM_PROMPT,
+  CODEBASE_SYSTEM_PROMPT,
   REST_SKILL_PROMPT,
   GRAPHQL_SKILL_PROMPT,
   GRPC_SKILL_PROMPT,
@@ -13,6 +14,8 @@ import {
   buildActionsBotPrompt,
   buildPushWebhookPrompt,
   buildPrWebhookPrompt,
+  buildCodebaseGeneratePrompt,
+  buildAugmentPrompt,
 } from "../../src/core/prompts.ts";
 import type { SwagenConfig } from "../../src/core/types.ts";
 
@@ -34,6 +37,11 @@ const MOCK_CONFIG: SwagenConfig = {
   aiModel: "claude-opus-4-5-20251101",
   storage: { backend: "memory" },
   cache: { strategy: "memory", ttlMs: 300_000, maxEntries: 256 },
+  mode: "spec",
+  discoveryPath: "src",
+  augment: false,
+  coverageThreshold: 0.7,
+  augmentStrategy: "smart-merge",
 };
 
 describe("BASE_SYSTEM_PROMPT", () => {
@@ -271,5 +279,71 @@ describe("buildPrWebhookPrompt", () => {
     const p = buildPrWebhookPrompt(7, "org/repo");
     expect(p).toContain("PR #7");
     expect(p).toContain("org/repo");
+  });
+});
+
+describe("CODEBASE_SYSTEM_PROMPT", () => {
+  it("is a non-empty string", () => {
+    expect(CODEBASE_SYSTEM_PROMPT.length).toBeGreaterThan(0);
+  });
+
+  it("mentions codebase tools", () => {
+    expect(CODEBASE_SYSTEM_PROMPT).toContain("discover_code");
+    expect(CODEBASE_SYSTEM_PROMPT).toContain("augment_tests");
+    expect(CODEBASE_SYSTEM_PROMPT).toContain("check_coverage");
+  });
+
+  it("describes smart-merge workflow", () => {
+    expect(CODEBASE_SYSTEM_PROMPT).toContain("smart-merge");
+    expect(CODEBASE_SYSTEM_PROMPT).toContain("Do not duplicate");
+  });
+});
+
+describe("buildCodebaseGeneratePrompt", () => {
+  it("includes discovery path, runner, output", () => {
+    const p = buildCodebaseGeneratePrompt(MOCK_CONFIG);
+    expect(p).toContain(MOCK_CONFIG.discoveryPath);
+    expect(p).toContain(MOCK_CONFIG.runner);
+    expect(p).toContain(MOCK_CONFIG.outDir);
+  });
+
+  it("includes coverage threshold", () => {
+    const p = buildCodebaseGeneratePrompt(MOCK_CONFIG);
+    expect(p).toContain("70%");
+  });
+
+  it("mentions augmentation strategy when augment enabled", () => {
+    const p = buildCodebaseGeneratePrompt({ ...MOCK_CONFIG, augment: true });
+    expect(p).toContain("smart-merge");
+  });
+
+  it("mentions standalone files when augment disabled", () => {
+    const p = buildCodebaseGeneratePrompt(MOCK_CONFIG);
+    expect(p).toContain("standalone");
+  });
+
+  it("includes run-tests instruction when andRun is true", () => {
+    const p = buildCodebaseGeneratePrompt(MOCK_CONFIG, true);
+    expect(p).toContain("run the tests");
+  });
+
+  it("omits run-tests when andRun is false", () => {
+    const p = buildCodebaseGeneratePrompt(MOCK_CONFIG, false);
+    expect(p).not.toContain("run the tests");
+  });
+});
+
+describe("buildAugmentPrompt", () => {
+  it("lists entities and strategy", () => {
+    const p = buildAugmentPrompt(
+      [
+        { name: "fn1", file: "src/a.ts" },
+        { name: "fn2", file: "src/b.ts" },
+      ],
+      "smart-merge",
+    );
+    expect(p).toContain("fn1");
+    expect(p).toContain("fn2");
+    expect(p).toContain("smart-merge");
   });
 });
