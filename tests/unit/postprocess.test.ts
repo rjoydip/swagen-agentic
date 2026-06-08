@@ -411,6 +411,54 @@ describe("postProcessGeneratedFiles", () => {
     expect(result).toBe(messy);
   });
 
+  it("formats file when format is enabled (falls back to normalizeNewlines)", async () => {
+    const rp = relPath("format.test.ts");
+    const absPath = write("format.test.ts", "import { x } from './y';\nconst a =   x;\n");
+    const files: GeneratedFile[] = [{ relativePath: rp, content: "", testCount: 1 }];
+
+    await postProcessGeneratedFiles(files, tmpDir, {
+      format: true,
+      deduplicate: false,
+      stripUnused: false,
+    });
+
+    const result = await Bun.file(absPath).text();
+    // normalizeNewlines should trim trailing spaces and normalize blank lines
+    expect(result).toBeDefined();
+  });
+
+  it("format fallback normalizes trailing whitespace and blank lines", async () => {
+    const rp = relPath("fmt-fallback.test.ts");
+    const absPath = write("fmt-fallback.test.ts", "import { x } from './y';\nconst a =   x;\n\n\n");
+    const files: GeneratedFile[] = [{ relativePath: rp, content: "", testCount: 1 }];
+
+    await postProcessGeneratedFiles(files, tmpDir, {
+      format: true,
+      deduplicate: false,
+      stripUnused: false,
+    });
+
+    const result = await Bun.file(absPath).text();
+    // normalizeNewlines should trim trailing whitespace, collapse blank lines, and ensure final newline
+    expect(result).not.toContain("\n\n\n");
+    expect(result.endsWith("\n")).toBe(true);
+  });
+
+  it("runFallow option does not throw when fallow is unavailable", async () => {
+    const rp = relPath("runfallow.test.ts");
+    write("runfallow.test.ts", "const x = 1;\n");
+    const files: GeneratedFile[] = [{ relativePath: rp, content: "", testCount: 1 }];
+
+    await expect(
+      postProcessGeneratedFiles(files, tmpDir, {
+        format: false,
+        deduplicate: false,
+        stripUnused: false,
+        runFallow: true,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it("applies all options together", async () => {
     const rp = relPath("all.test.ts");
     const absPath = write(

@@ -1,5 +1,7 @@
 import { describe, it, expect } from "bun:test";
-import { extractEntities } from "../../src/discovery/extractor.ts";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { discoverCodebase, extractEntities } from "../../src/discovery/index.ts";
 import { detectFramework, detectRoutePatterns } from "../../src/discovery/framework.ts";
 
 const SAMPLE_SOURCE = `
@@ -93,6 +95,128 @@ describe("extractEntities", () => {
     const entities = extractEntities("test.ts", undefined, SAMPLE_SOURCE);
     const exported = entities.filter((e) => e.isExported);
     expect(exported.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("extracts default exports", () => {
+    const src = `export default function main() {\n  return "ok";\n}\n`;
+    const entities = extractEntities("main.ts", undefined, src);
+    expect(entities.some((e) => e.name === "main" && e.visibility === "default")).toBe(true);
+  });
+
+  it("extracts default class exports", () => {
+    const src = `export default class App {\n  run() {}\n}\n`;
+    const entities = extractEntities("app.ts", undefined, src);
+    const app = entities.find((e) => e.name === "App");
+    expect(app).toBeDefined();
+    expect(app?.type).toBe("class");
+    expect(app?.isExported).toBe(true);
+  });
+
+  it("extracts decorated methods", () => {
+    const src = [
+      `class UsersController {`,
+      `  @Get("/users")`,
+      `  async findAll() { return []; }`,
+      `}`,
+      ``,
+    ].join("\n");
+    const entities = extractEntities("users.ts", undefined, src);
+    const method = entities.find((e) => e.name === "findAll");
+    expect(method).toBeDefined();
+    expect(method?.type).toBe("method");
+    expect(method?.decorators).toBeDefined();
+    expect(method?.decorators?.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("extracts decorated methods with Post", () => {
+    const src = [
+      `class ItemsController {`,
+      `  @Post("/items")`,
+      `  async create() { return {}; }`,
+      `}`,
+      ``,
+    ].join("\n");
+    const entities = extractEntities("items.ts", undefined, src);
+    expect(entities.some((e) => e.name === "create" && e.type === "method")).toBe(true);
+  });
+
+  it("extracts decorated methods with Put, Patch, Delete", () => {
+    for (const decorator of ["Put", "Patch", "Delete"]) {
+      const src = [
+        `class C {`,
+        `  @${decorator}("/")`,
+        `  async handler() { return {}; }`,
+        `}`,
+        ``,
+      ].join("\n");
+      const entities = extractEntities("c.ts", undefined, src);
+      expect(entities.some((e) => e.name === "handler" && e.type === "method")).toBe(true);
+    }
+  });
+
+  it("extracts decorated methods with Head, Options", () => {
+    for (const decorator of ["Head", "Options"]) {
+      const src = [`class C {`, `  @${decorator}("/")`, `  handler() { return {}; }`, `}`, ``].join(
+        "\n",
+      );
+      const entities = extractEntities("c.ts", undefined, src);
+      expect(entities.some((e) => e.name === "handler" && e.type === "method")).toBe(true);
+    }
+  });
+
+  it("skips decorated method when next line is blank", () => {
+    const src = [`class Foo {`, `  @Get("/foo")`, ``, `  helper() {}`, `}`, ``].join("\n");
+    const entities = extractEntities("foo.ts", undefined, src);
+    expect(entities.some((e) => e.name === "helper")).toBe(true);
+  });
+
+  it("extracts interfaces", () => {
+    const src = [`interface User {`, `  id: number;`, `  name: string;`, `}`, ``].join("\n");
+    const entities = extractEntities("types.ts", undefined, src);
+    expect(entities.some((e) => e.name === "User" && e.type === "interface")).toBe(true);
+  });
+
+  it("extracts exported interfaces", () => {
+    const src = [`export interface Config {`, `  debug: boolean;`, `}`, ``].join("\n");
+    const entities = extractEntities("types.ts", undefined, src);
+    const cfg = entities.find((e) => e.name === "Config");
+    expect(cfg).toBeDefined();
+    expect(cfg?.isExported).toBe(true);
+  });
+
+  it("extracts type aliases", () => {
+    const src = `type Predicate<T> = (value: T) => boolean;\n`;
+    const entities = extractEntities("types.ts", undefined, src);
+    expect(entities.some((e) => e.name === "Predicate" && e.type === "type")).toBe(true);
+  });
+
+  it("extracts exported type aliases", () => {
+    const src = [`export type Options = {`, `  verbose: boolean;`, `};\n`].join("\n");
+    const entities = extractEntities("types.ts", undefined, src);
+    const opt = entities.find((e) => e.name === "Options");
+    expect(opt).toBeDefined();
+    expect(opt?.isExported).toBe(true);
+  });
+
+  it("extracts exported variables", () => {
+    const src = `export const VERSION = "1.0.0";\n`;
+    const entities = extractEntities("consts.ts", undefined, src);
+    expect(entities.some((e) => e.name === "VERSION" && e.type === "variable")).toBe(true);
+  });
+
+  it("extracts non-exported classes", () => {
+    const src = `class InternalHelper {\n  doStuff() {}\n}\n`;
+    const entities = extractEntities("helper.ts", undefined, src);
+    const cls = entities.find((e) => e.name === "InternalHelper");
+    expect(cls).toBeDefined();
+    expect(cls?.isExported).toBe(false);
+  });
+
+  it("deduplicates by (name, line)", () => {
+    const src = [`export const foo = (x: number) => x;`].join("\n");
+    const entities = extractEntities("test.ts", undefined, src);
+    const foos = entities.filter((e) => e.name === "foo");
+    expect(foos.length).toBe(1); // variable + arrow function → deduped
   });
 });
 
@@ -335,6 +459,75 @@ server.listen(3000, () => console.log("running"));
     expect(
       detectFramework(["utils.ts"], () => "export const add = (a: number, b: number) => a + b;"),
     ).toBe("unknown");
+  });
+});
+
+describe("discoverCodebase", () => {
+  it("returns empty analysis for non-existent path", () => {
+    const result = discoverCodebase({ discoveryPath: "/nonexistent/path/xyz123" });
+    expect(result.entities).toEqual([]);
+    expect(result.framework).toBe("unknown");
+    expect(result.entryPoints).toEqual([]);
+  });
+
+  it("discovers entities in src/", () => {
+    const result = discoverCodebase({ discoveryPath: "src" });
+    expect(result.entities.length).toBeGreaterThan(0);
+    expect(typeof result.framework).toBe("string");
+    expect(Array.isArray(result.entryPoints)).toBe(true);
+  });
+
+  it("detects entry points (index.ts, main.ts, app.ts)", () => {
+    const result = discoverCodebase({ discoveryPath: "src" });
+    const hasIndex = result.entryPoints.some((ep: string) => ep.endsWith("index.ts"));
+    expect(hasIndex).toBe(true);
+  });
+
+  it("discovers test files via testPath option (lines 37-45)", () => {
+    const {
+      mkdtempSync: mkdtemp,
+      mkdirSync: mkdirs,
+      writeFileSync: writeFile,
+      rmSync: rmdir,
+    } = require("node:fs");
+    const { join: joinPath } = require("node:path");
+    const tmpDir = mkdtemp("swagen-testpath-");
+    try {
+      mkdirs(joinPath(tmpDir, "src"), { recursive: true });
+      mkdirs(joinPath(tmpDir, "tests"), { recursive: true });
+      writeFile(joinPath(tmpDir, "src", "lib.ts"), "export function foo() {}");
+      writeFile(joinPath(tmpDir, "tests", "lib.test.ts"), "it('test', () => {})");
+      const result = discoverCodebase({
+        discoveryPath: joinPath(tmpDir, "src"),
+        testPath: joinPath(tmpDir, "tests"),
+      });
+      expect(result.testFilePaths?.length ?? 0).toBeGreaterThan(0);
+      expect(result.testFilePaths?.some((p) => p.endsWith("lib.test.ts")) ?? false).toBe(true);
+    } finally {
+      rmdir(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("discovers test files from separate testPath", () => {
+    const tmpDir = mkdtempSync("swagen-disc-");
+    try {
+      mkdirSync(join(tmpDir, "src"), { recursive: true });
+      writeFileSync(join(tmpDir, "src", "helper.ts"), "export function helper() { return 1; }");
+      mkdirSync(join(tmpDir, "tests"), { recursive: true });
+      writeFileSync(
+        join(tmpDir, "tests", "helper.test.ts"),
+        "import { describe } from 'bun:test';",
+      );
+      const result = discoverCodebase({
+        discoveryPath: join(tmpDir, "src"),
+        testPath: join(tmpDir, "tests"),
+      });
+      expect(result.entities.length).toBeGreaterThan(0);
+      expect(result.testFilePaths?.length).toBeGreaterThan(0);
+      expect(result.testFilePaths?.some((p: string) => p.includes("helper.test.ts"))).toBe(true);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 

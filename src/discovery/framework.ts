@@ -108,22 +108,23 @@ export function detectRoutePatterns(
     routes.push({ method: method.toUpperCase(), path, line });
   }
 
+  function addInferredRoutes(re: RegExp) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      const method = m[1] ?? "GET";
+      const line = countNewlines(content, m.index) + 1;
+      routes.push({ method, path: "/(inferred)", line });
+    }
+  }
+
   // node:http switch-case routing: switch(req.method) { case "GET": ...
   const nodeSwitchRe =
     /switch\s*\(\s*(?:req\.method)\s*\)\s*\{[.\s\S]*?case\s+["'`](GET|POST|PUT|PATCH|DELETE)["'`]/g;
-  while ((match = nodeSwitchRe.exec(content)) !== null) {
-    const method = match[1] ?? "GET";
-    const line = countNewlines(content, match.index) + 1;
-    routes.push({ method, path: "/(inferred)", line });
-  }
+  addInferredRoutes(nodeSwitchRe);
 
   // node:http object-lookup routing: const routes = { GET: handler, POST: handler }
   const nodeMapRe = /(?:const|let|var)\s+\w+\s*=\s*\{\s*(?:\s*(GET|POST|PUT|PATCH|DELETE)\s*:)/g;
-  while ((match = nodeMapRe.exec(content)) !== null) {
-    const method = match[1] ?? "GET";
-    const line = countNewlines(content, match.index) + 1;
-    routes.push({ method, path: "/(inferred)", line });
-  }
+  addInferredRoutes(nodeMapRe);
 
   // NestJS: @Get('path')
   const decoratorRe = /@(Get|Post|Put|Patch|Delete|Head|Options)\s*\(\s*["'`]([^"'`]*)["'`]/g;

@@ -16,6 +16,7 @@ import {
   hr,
   printHelp,
   createSpinner,
+  printCommandHelp,
 } from "../../src/utils/fmt.ts";
 import type { CommandDef } from "../../src/utils/fmt.ts";
 import { MemoryCache, NoopCache, createCache, cacheKey, withCache } from "../../src/cache.ts";
@@ -352,6 +353,86 @@ describe("createSpinner", () => {
     expect(s.text).toBe("updated");
     s.stop();
     delete process.env["NO_COLOR"];
+  });
+
+  it("succeed and fail write to stdout without color", () => {
+    process.env["NO_COLOR"] = "1";
+    const write = process.stdout.write.bind(process.stdout);
+    const chunks: string[] = [];
+    process.stdout.write = (c: string) => {
+      chunks.push(c);
+      return true;
+    };
+    const s = createSpinner("loading");
+    s.succeed("done");
+    expect(chunks.some((c) => c.includes("done"))).toBe(true);
+    s.fail("error");
+    expect(chunks.some((c) => c.includes("error"))).toBe(true);
+    process.stdout.write = write;
+    delete process.env["NO_COLOR"];
+  });
+
+  it("spinner with color support writes ANSI", () => {
+    const origIsTTY = process.stdout.isTTY;
+    process.stdout.isTTY = true;
+    const write = process.stdout.write.bind(process.stdout);
+    const chunks: string[] = [];
+    process.stdout.write = (c: string) => {
+      chunks.push(c);
+      return true;
+    };
+    const s = createSpinner("working");
+    expect(s.text).toBe("working");
+    s.text = "processing";
+    expect(s.text).toBe("processing");
+    s.succeed("completed");
+    expect(chunks.some((c) => c.includes("completed"))).toBe(true);
+    s.fail("failed");
+    expect(chunks.some((c) => c.includes("failed"))).toBe(true);
+    s.stop();
+    process.stdout.write = write;
+    process.stdout.isTTY = origIsTTY;
+  });
+});
+
+describe("printCommandHelp", () => {
+  it("outputs detailed help for a command", () => {
+    const write = process.stdout.write.bind(process.stdout);
+    const chunks: string[] = [];
+    process.stdout.write = (c: string) => {
+      chunks.push(c);
+      return true;
+    };
+    printCommandHelp(
+      {
+        name: "generate",
+        args: "<spec>",
+        description: "Generate API tests",
+        flags: [{ flag: "--runner", description: "Test runner (bun|vitest)" }],
+        examples: [{ cmd: "swagen generate api.yaml", desc: "Generate from spec" }],
+      },
+      "2.0.0",
+    );
+    process.stdout.write = write;
+    const output = chunks.join("");
+    expect(output).toContain("generate");
+    expect(output).toContain("<spec>");
+    expect(output).toContain("v2.0.0");
+    expect(output).toContain("--runner");
+    expect(output).toContain("swagen generate api.yaml");
+  });
+
+  it("handles command with no flags or examples", () => {
+    const write = process.stdout.write.bind(process.stdout);
+    const chunks: string[] = [];
+    process.stdout.write = (c: string) => {
+      chunks.push(c);
+      return true;
+    };
+    printCommandHelp({ name: "status", description: "Show run status" }, "1.0.0");
+    process.stdout.write = write;
+    const output = chunks.join("");
+    expect(output).toContain("status");
   });
 });
 

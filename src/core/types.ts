@@ -232,6 +232,13 @@ export interface SwagenConfig {
   coverageThreshold: number;
   /** Strategy for augmenting existing tests */
   augmentStrategy: AugmentStrategy;
+  /** MCP server configuration */
+  mcp?: McpConfig;
+}
+
+export interface McpConfig {
+  port: number;
+  authToken?: string;
 }
 
 export const DEFAULT_CONFIG: Partial<SwagenConfig> = {
@@ -255,6 +262,7 @@ export const DEFAULT_CONFIG: Partial<SwagenConfig> = {
   augmentStrategy: "smart-merge",
   storage: { backend: "memory" },
   cache: { strategy: "memory", ttlMs: 5 * 60_000, maxEntries: 256 },
+  mcp: { port: 3000 },
 };
 
 // ─── Generated output ─────────────────────────────────────────────────────────

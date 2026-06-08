@@ -1,8 +1,16 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
+import {
+  mapEndpointsToSummary,
+  filterEntitiesByNames,
+  generateAndMergeTests,
+  searchProjectFiles,
+  runTestRunner,
+  writeGeneratedFiles,
+} from "../shared/tool-helpers.ts";
 import { loadSpec, analyzeSpec } from "../core/spec.ts";
 import { generateTestFiles } from "../core/codegen.ts";
 import { listRunRecords } from "./state.ts";
@@ -13,12 +21,7 @@ import { formatDuration } from "../utils/fmt.ts";
 import { discoverCodebase, formatDiscoveryPrompt } from "../discovery/index.ts";
 import { walkFiles, isTestFile } from "../discovery/walker.ts";
 import { enrichAnalysisWithCoverage, generateCoverageReport } from "../coverage/index.ts";
-import {
-  analyzeTestPatterns,
-  mergeTestFiles,
-  generateUnitTests,
-  readTestFile,
-} from "../core/augmenter.ts";
+import { analyzeTestPatterns, readTestFile } from "../core/augmenter.ts";
 import type { RunState } from "../di.ts";
 
 type ToolResult = {
@@ -166,15 +169,7 @@ export function createTools(
 
       state.endpoints = result.endpoints;
 
-      const summary = result.endpoints.map((ep) => ({
-        operationId: ep.operationId,
-        method: ep.method.toUpperCase(),
-        path: ep.path,
-        tags: ep.tags,
-        params: ep.params.length,
-        hasBody: !!ep.body,
-        deprecated: ep.deprecated,
-      }));
+      const summary = mapEndpointsToSummary(result.endpoints);
 
       return ok(
         {
@@ -243,8 +238,6 @@ export function createTools(
 
   // ── 5. write_files ───────────────────────────────────────────────────────
 
-  const PROTECTED = new Set(["setup.ts", "fixtures.ts"]);
-
   const writeFiles: AgentTool<any, any> = {
     name: "write_files",
     label: "Write Files",
@@ -259,24 +252,11 @@ export function createTools(
       const { dryRun = false } = params as { dryRun?: boolean };
       if (!state.generatedFiles?.length) err("Call generate_tests first.");
       const dry = dryRun || config.dryRun;
-      const written: string[] = [];
-      const skipped: string[] = [];
-
-      for (const file of state.generatedFiles!) {
-        const base = file.relativePath.split("/").pop() ?? "";
-        const abs = join(process.cwd(), file.relativePath);
-
-        if (PROTECTED.has(base) && existsSync(abs)) {
-          skipped.push(file.relativePath);
-          continue;
-        }
-
-        if (!dry) {
-          mkdirSync(dirname(abs), { recursive: true });
-          await Bun.write(abs, file.content); // eslint-disable-line no-await-in-loop
-        }
-        written.push(file.relativePath);
-      }
+      const { written, skipped } = await writeGeneratedFiles(
+        state.generatedFiles!,
+        dry,
+        process.cwd(),
+      );
 
       if (!dry && written.length > 0) {
         const { postProcessGeneratedFiles } = await import("../core/postprocess.ts");
@@ -316,29 +296,17 @@ export function createTools(
       const args = params as { runner?: "bun" | "vitest"; targetDir?: string };
       const runner = args.runner ?? config.runner;
       const dir = args.targetDir ?? config.outDir;
-      const cmd = runner === "vitest" ? ["bunx", "vitest", "run", dir] : ["bun", "test", dir];
-
-      const start = Date.now();
-      const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
-      const [stdout, stderr, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]);
-      const durationMs = Date.now() - start;
-      const combined = stdout + stderr;
-      const passed = parseInt(combined.match(/(\d+) passed/)?.[1] ?? "0", 10);
-      const failed = parseInt(combined.match(/(\d+) failed/)?.[1] ?? "0", 10);
+      const parsed = await runTestRunner(runner, dir);
 
       return ok(
         {
-          exitCode: code,
-          passed,
-          failed,
-          durationMs: formatDuration(durationMs),
-          output: combined.slice(0, 3000),
+          exitCode: parsed.exitCode,
+          passed: parsed.passed,
+          failed: parsed.failed,
+          durationMs: formatDuration(parsed.durationMs),
+          output: parsed.output.slice(0, 3000),
         },
-        { exitCode: code },
+        { exitCode: parsed.exitCode },
       );
     },
   };
@@ -424,32 +392,8 @@ export function createTools(
         maxResults?: number;
         caseSensitive?: boolean;
       };
-      const results: Array<{ file: string; line: number; content: string }> = [];
-      const glob = new Bun.Glob(pathPattern ?? "**/*.{ts,js,mjs,yaml,yml,json}");
-      let count = 0;
-      try {
-        for await (const file of glob.scan({ cwd: process.cwd(), absolute: true })) {
-          if (file.includes("node_modules") || file.includes(".swagen")) continue;
-          if (count >= maxResults) break;
-          try {
-            const text = await Bun.file(file).text();
-            const lines = text.split("\n");
-            const rel = file.slice(process.cwd().length + 1).replace(/\\/g, "/");
-            for (let i = 0; i < lines.length && count < maxResults; i++) {
-              const line = lines[i];
-              const flags = caseSensitive ? "" : "i";
-              if (line && line.match(new RegExp(pattern, flags))) {
-                results.push({ file: rel, line: i + 1, content: line.trim().slice(0, 200) });
-                count++;
-              }
-            }
-          } catch (e) {
-            console.warn(`search: Failed to read ${file}: ${e}`);
-          }
-        }
-      } catch (e) {
-        console.warn(`search: Glob scan error: ${e}`);
-      }
+      const flags = caseSensitive ? "" : "i";
+      const results = await searchProjectFiles(pathPattern, maxResults, pattern, flags);
       if (results.length === 0) return ok({ message: "No matches found.", results: [] });
       return ok({ matchCount: results.length, results });
     },
@@ -779,27 +723,10 @@ export function createTools(
 
       const testFilePaths = enrichWithCoverage(state);
 
-      // Filter to target entities if specified
-      let targetEntities = state.codebaseAnalysis.entities;
-      if (args.targetEntities?.length) {
-        targetEntities = state.codebaseAnalysis.entities.filter((e) =>
-          args.targetEntities!.includes(e.name),
-        );
-      }
-
-      // Detect conventions from existing tests
-      const conventions = analyzeTestPatterns(testFilePaths.map((f) => relative(process.cwd(), f)));
-
-      // Generate unit tests for target entities
-      const generatedFiles = generateUnitTests(
-        targetEntities,
-        config,
-        conventions,
-        config.discoveryPath,
-      );
-
-      // Merge with existing test files (relativePath already includes outDir)
-      const mergedFiles = mergeTestFiles(generatedFiles, process.cwd(), strategy);
+      const targetEntities = args.targetEntities?.length
+        ? filterEntitiesByNames(state.codebaseAnalysis.entities, args.targetEntities)
+        : state.codebaseAnalysis.entities;
+      const mergedFiles = generateAndMergeTests(targetEntities, testFilePaths, config, strategy);
 
       state.generatedFiles = mergedFiles;
 

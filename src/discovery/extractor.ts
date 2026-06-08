@@ -137,7 +137,7 @@ export function extractEntities(
     {
       regex: /@(Get|Post|Put|Patch|Delete|Head|Options)\(/g,
       build: (m, line) => {
-        const methodLineIdx = findNextNonBlankLine(lines, line);
+        const methodLineIdx = findNextNonBlankLine(lines, line - 1);
         if (methodLineIdx === null) return null;
         const methodContent = lines[methodLineIdx];
         if (methodContent === undefined) return null;
@@ -175,9 +175,9 @@ export function extractEntities(
         };
       },
     },
-    // Type: type Foo = ...
+    // Type: type Foo = ...  or type Foo<T> = ...
     {
-      regex: /^(?:export\s+)?type\s+(\w+)\s*=/gm,
+      regex: /^(?:export\s+)?type\s+(\w+)(?:<[^>]+>)?\s*=/gm,
       build: (m, line) => {
         const fullMatch = m[0] ?? "";
         return {
