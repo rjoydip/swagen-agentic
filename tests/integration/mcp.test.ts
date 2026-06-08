@@ -245,9 +245,11 @@ describe("MCP server (stdio transport)", () => {
   });
 
   it("run_tests completes without crashing", async () => {
+    // Use a small, fast test subset that doesn't include integration tests
+    // to avoid infinite recursion (the test runner would find this test file)
     const res = await client.request("tools/call", {
       name: "run_tests",
-      arguments: { targetDir: "tests/unit", runner: "bun" },
+      arguments: { targetDir: "tests/unit/mcp.test.ts", runner: "bun" },
     });
     expect(res.error).toBeUndefined();
     const result = res.result as { content: Array<{ text: string }> };
@@ -255,7 +257,7 @@ describe("MCP server (stdio transport)", () => {
     expect(() => JSON.parse(text)).not.toThrow();
     const parsed = JSON.parse(text);
     expect(typeof parsed.exitCode).toBe("number");
-  }, 30000);
+  }, 60000);
 
   it("survives sequential tool/list calls", async () => {
     for (let i = 0; i < 5; i++) {

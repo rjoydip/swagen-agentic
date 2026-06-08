@@ -109,6 +109,49 @@ describe("FileStorage", () => {
     const ids = await store.listSessions();
     expect(ids.length).toBe(2);
   });
+
+  it("listSessions returns empty for non-existent directory", async () => {
+    const emptyStore = new FileStorage(".swagen/nonexistent-sessions-xyz");
+    const ids = await emptyStore.listSessions();
+    expect(ids).toEqual([]);
+  });
+
+  it("deleteSession removes session file", async () => {
+    const s = makeSession("del-session");
+    await store.putSession(s);
+    expect(await store.getSession("del-session")).not.toBeNull();
+    await store.deleteSession("del-session");
+    expect(await store.getSession("del-session")).toBeNull();
+  });
+
+  it("deleteSession does not throw for non-existent session", async () => {
+    await expect(store.deleteSession("nope-nonexistent")).resolves.toBeUndefined();
+  });
+
+  it("appendRun throws for missing session", async () => {
+    await expect(
+      store.appendRun("no-such-session", {
+        id: "run1",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        endpointCount: 0,
+        generatedFiles: [],
+      }),
+    ).rejects.toThrow("Session not found");
+  });
+
+  it("appendRun updates session file", async () => {
+    const s = makeSession("append-test");
+    await store.putSession(s);
+    await store.appendRun("append-test", {
+      id: "run1",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      endpointCount: 3,
+      generatedFiles: ["test.ts"],
+    });
+    const updated = await store.getSession("append-test");
+    expect(updated?.runs).toHaveLength(1);
+    expect(updated?.runs[0]?.id).toBe("run1");
+  });
 });
 
 // ─── newSession helper ────────────────────────────────────────────────────────

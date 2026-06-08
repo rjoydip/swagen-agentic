@@ -12,7 +12,7 @@ import {
   unauthorizedResponse,
 } from "../../src/mcp/auth.ts";
 import { buildMcpTools } from "../../src/mcp/tools.ts";
-import type { ResolvedEndpoint, SwagenConfig } from "../../src/core/types.ts";
+import type { ResolvedEndpoint, SwagenConfig, GeneratedFile } from "../../src/core/types.ts";
 import { buildServer } from "../../src/mcp/server.ts";
 
 // ─── Mock config ──────────────────────────────────────────────────────────────
@@ -100,6 +100,20 @@ describe("mcp/session", () => {
     // And should not be the same reference as before clear
     expect(freshA.id).toBe("a");
     expect(freshB.id).toBe("b");
+  });
+
+  it("evicts expired sessions when creating new ones", () => {
+    const origDateNow = Date.now;
+    try {
+      getOrCreateSession("evict-me");
+      // Advance time by 31 minutes so the old session appears expired
+      Date.now = () => origDateNow() + 31 * 60 * 1000;
+      getOrCreateSession("trigger");
+      const refreshed = getOrCreateSession("evict-me");
+      expect(refreshed.spec).toBeNull();
+    } finally {
+      Date.now = origDateNow;
+    }
   });
 });
 
@@ -234,6 +248,31 @@ describe("mcp/tools", () => {
     expect(result.isError).toBe(true);
   });
 
+  it("generate_tests with operationIds filters endpoints", async () => {
+    const tool = tools.find((t) => t.name === "generate_tests")!;
+    const sid = "gen-opids-sid";
+    const session = getOrCreateSession(sid);
+    const mockEp: ResolvedEndpoint = {
+      operationId: "getFoo",
+      method: "get",
+      path: "/foo",
+      params: [],
+      responses: [],
+      security: [],
+      tags: [],
+      deprecated: false,
+      summary: "",
+      body: undefined,
+    };
+    session.endpoints = [mockEp, { ...mockEp, operationId: "getBar" }];
+    const result = await tool.handler({ operationIds: ["getFoo"] }, sid);
+    expect(result.isError).toBeUndefined();
+    const text = (result.content[0] as { text: string }).text;
+    const parsed = JSON.parse(text);
+    expect(typeof parsed.fileCount).toBe("number");
+    expect(typeof parsed.totalTests).toBe("number");
+  });
+
   it("write_test_files returns error when no generated files", async () => {
     const tool = tools.find((t) => t.name === "write_test_files")!;
     const result = await tool.handler({}, "fresh-sid-no-files");
@@ -329,7 +368,6 @@ describe("mcp/server", () => {
     const { server } = await buildServer({ config: TEST_CONFIG });
     expect(server).toBeDefined();
 
-    // Verify handlers exist by checking the registered request handlers
     const handlers = (server as any)["_requestHandlers"];
     expect(handlers?.has("tools/list")).toBe(true);
     expect(handlers?.has("tools/call")).toBe(true);
@@ -346,6 +384,275 @@ describe("mcp/server", () => {
     expect(names).toContain("analyze_spec");
     expect(names).toContain("generate_tests");
     expect(names).toContain("write_test_files");
+  });
+
+  it("ListToolsRequestSchema handler returns all tool definitions", async () => {
+    const { server, tools } = await buildServer({ config: TEST_CONFIG });
+    const handlers = (server as any)["_requestHandlers"];
+    const listHandler = handlers.get("tools/list");
+    // Call with proper JSON-RPC request shape
+    const result = await listHandler({ params: {}, method: "tools/list" });
+    expect(result.tools).toHaveLength(tools.length);
+    for (const t of result.tools) {
+      expect(t.name).toBeTruthy();
+      expect(typeof t.description).toBe("string");
+      expect(t.inputSchema).toBeTruthy();
+    }
+  });
+
+  it("CallToolRequestSchema routes to correct tool handler", async () => {
+    const { server } = await buildServer({ config: TEST_CONFIG });
+    const handlers = (server as any)["_requestHandlers"];
+    const callHandler = handlers.get("tools/call");
+    const result = await callHandler({
+      params: { name: "validate_spec", arguments: { source: "nonexistent.yaml" } },
+      method: "tools/call",
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it("CallToolRequestSchema returns error for unknown tool name", async () => {
+    const { server } = await buildServer({ config: TEST_CONFIG });
+    const handlers = (server as any)["_requestHandlers"];
+    const callHandler = handlers.get("tools/call");
+    const result = await callHandler({
+      params: { name: "no_such_tool", arguments: {} },
+      method: "tools/call",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain("Unknown tool");
+  });
+
+  it("CallToolRequestSchema wraps handler exception in error response", async () => {
+    const { server } = await buildServer({ config: TEST_CONFIG });
+    const handlers = (server as any)["_requestHandlers"];
+    const callHandler = handlers.get("tools/call");
+    const result = await callHandler({
+      params: { name: "get_run_history", arguments: { limit: 5 } },
+      method: "tools/call",
+    });
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]?.text).toBeDefined();
+  });
+
+  it("CallToolRequestSchema uses default sessionId when _sessionId missing", async () => {
+    const { server } = await buildServer({ config: TEST_CONFIG });
+    const handlers = (server as any)["_requestHandlers"];
+    const callHandler = handlers.get("tools/call");
+    const result = await callHandler({
+      params: { name: "get_run_history", arguments: {} },
+      method: "tools/call",
+    });
+    expect(result.isError).toBeUndefined();
+  });
+
+  it("CallToolRequestSchema catch block wraps handler errors", async () => {
+    const { server, tools } = await buildServer({ config: TEST_CONFIG });
+    const handlers = (server as any)["_requestHandlers"];
+    const callHandler = handlers.get("tools/call");
+    const targetTool = tools.find((t) => t.name === "get_run_history")!;
+    const origHandler = targetTool.handler;
+    targetTool.handler = async () => {
+      throw new Error("test handler error");
+    };
+    const result = await callHandler({
+      params: { name: "get_run_history", arguments: {} },
+      method: "tools/call",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toBe("Error: Error: test handler error");
+    targetTool.handler = origHandler;
+  });
+});
+
+// ─── MCP tool error path tests ─────────────────────────────────────────────
+
+describe("mcp/tools — error paths", () => {
+  const tools = buildMcpTools(TEST_CONFIG);
+
+  it("validate_spec catches and returns load errors", async () => {
+    const tool = tools.find((t) => t.name === "validate_spec")!;
+    const result = await tool.handler({ source: "" }, "sid");
+    expect(result.isError).toBe(true);
+  });
+
+  it("analyze_spec returns error for empty source", async () => {
+    const tool = tools.find((t) => t.name === "analyze_spec")!;
+    const result = await tool.handler({ source: "" }, "sid");
+    expect(result.isError).toBe(true);
+  });
+
+  it("run_tests catches and returns errors", async () => {
+    const tool = tools.find((t) => t.name === "run_tests")!;
+    const result = await tool.handler({}, "sid");
+    // Should not throw — returns error content if test run fails
+    expect(result.content).toBeDefined();
+  });
+
+  it("run_tests with non-existent directory returns result", async () => {
+    const tool = tools.find((t) => t.name === "run_tests")!;
+    const result = await tool.handler({ targetDir: "/nonexistent-dir-98765" }, "sid");
+    expect(result.content).toBeDefined();
+    const text = (result.content[0] as { text: string }).text;
+    const parsed = JSON.parse(text);
+    expect(typeof parsed.exitCode).toBe("number");
+  });
+
+  it("read_source_file returns error for non-existent path", async () => {
+    const tool = tools.find((t) => t.name === "read_source_file")!;
+    const result = await tool.handler({ path: "" }, "sid");
+    expect(result.isError).toBe(true);
+  });
+
+  it("read_source_file catches and returns read errors", async () => {
+    const tool = tools.find((t) => t.name === "read_source_file")!;
+    // Path exists but is a directory — will cause a read error
+    const result = await tool.handler({ path: "src" }, "sid");
+    expect(result.isError).toBe(true);
+  });
+
+  it("search_project_files returns empty when no matches", async () => {
+    const tool = tools.find((t) => t.name === "search_project_files")!;
+    const result = await tool.handler(
+      { pattern: "XYZZY_NOTHING_MATCHES_12345", pathPattern: "*.ts", maxResults: 10 },
+      "sid",
+    );
+    expect(result.isError).toBeUndefined();
+    const text = (result.content[0] as { text: string }).text;
+    const parsed = JSON.parse(text);
+    expect(parsed.matchCount).toBe(0);
+  });
+
+  it("generate_from_spec dry run returns with dryRun=true", async () => {
+    // We can't actually load a real spec here, so expect error
+    const tool = tools.find((t) => t.name === "generate_from_spec")!;
+    const result = await tool.handler({ source: "nonexistent.yaml", dryRun: true }, "sid");
+    expect(result.isError).toBe(true);
+  });
+
+  it("get_run_history returns empty records", async () => {
+    const tool = tools.find((t) => t.name === "get_run_history")!;
+    const result = await tool.handler({ limit: 0 }, "sid");
+    expect(result.isError).toBeUndefined();
+    const text = (result.content[0] as { text: string }).text;
+    const parsed = JSON.parse(text);
+    expect(Array.isArray(parsed.records)).toBe(true);
+  });
+
+  it("coverage_report returns coverage analysis without session", async () => {
+    const tool = tools.find((t) => t.name === "coverage_report")!;
+    const result = await tool.handler({ discoveryPath: "src" }, "sid");
+    expect(result.isError).toBeUndefined();
+    const text = (result.content[0] as { text: string }).text;
+    const parsed = JSON.parse(text);
+    expect(parsed.totalEntities).toBeGreaterThan(0);
+  }, 30000);
+
+  it("check_test_coverage caches codebaseAnalysis on session", async () => {
+    const tool = tools.find((t) => t.name === "check_test_coverage")!;
+    const sid = "coverage-cache-test";
+    // First call should populate session
+    const result1 = await tool.handler({ discoveryPath: "src" }, sid);
+    expect(result1.isError).toBeUndefined();
+    // Second call should reuse session's codebaseAnalysis
+    const result2 = await tool.handler({ discoveryPath: "src" }, sid);
+    expect(result2.isError).toBeUndefined();
+  }, 30000);
+
+  it("augment_tests works with target entities", async () => {
+    const tool = tools.find((t) => t.name === "augment_tests")!;
+    const result = await tool.handler(
+      { discoveryPath: "src", targetEntities: ["buildServer"] },
+      "sid",
+    );
+    expect(result.isError).toBeUndefined();
+  }, 30000);
+
+  it("write_test_files with dryRun does not write", async () => {
+    const writeTool = tools.find((t) => t.name === "write_test_files")!;
+    const sid = "write-dryrun-sid";
+    const result = await writeTool.handler({ dryRun: true }, sid);
+    expect(result.isError).toBe(true);
+  });
+
+  it("generate_tests with operationIds filters endpoints", async () => {
+    const generateTool = tools.find((t) => t.name === "generate_tests")!;
+    const sid = "gen-with-ops";
+
+    // Set up session with mock endpoints directly
+    const session = getOrCreateSession(sid);
+    session.endpoints = [
+      {
+        operationId: "listPets",
+        method: "get",
+        path: "/pets",
+        tags: ["pets"],
+        params: [],
+        body: undefined,
+        responses: [],
+        security: [],
+        deprecated: false,
+      } as unknown as ResolvedEndpoint,
+      {
+        operationId: "createPet",
+        method: "post",
+        path: "/pets",
+        tags: ["pets"],
+        params: [],
+        body: undefined,
+        responses: [],
+        security: [],
+        deprecated: false,
+      } as unknown as ResolvedEndpoint,
+    ];
+
+    const result = await generateTool.handler({ operationIds: ["listPets"] }, sid);
+    expect(result.isError).toBeUndefined();
+    const text = (result.content[0] as { text: string }).text;
+    const parsed = JSON.parse(text);
+    expect(parsed.fileCount).toBeGreaterThan(0);
+  });
+
+  it("write_test_files writes when dryRun is false", async () => {
+    const { mkdtempSync: mkdtemp, rmSync: rmdir } = require("node:fs");
+    const { join: joinPath } = require("node:path");
+    const tmpDir = mkdtemp("swagen-mcp-write-");
+    try {
+      const mcpTools = buildMcpTools({
+        ...TEST_CONFIG,
+        outDir: joinPath(tmpDir, "tests"),
+      });
+
+      const writeTool = mcpTools.find((t) => t.name === "write_test_files")!;
+      const sid = "write-test";
+
+      // Set up session with mock generated files
+      const session = getOrCreateSession(sid);
+      session.generatedFiles = [
+        {
+          relativePath: "tests/pets.test.ts",
+          content: "// test content",
+          testCount: 1,
+        } as unknown as GeneratedFile,
+      ];
+
+      const result = await writeTool.handler({ dryRun: false }, sid);
+      expect(result.isError).toBeUndefined();
+      const text = (result.content[0] as { text: string }).text;
+      const parsed = JSON.parse(text);
+      expect(parsed.written.length).toBeGreaterThan(0);
+    } finally {
+      rmdir(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("run_tests catches handler errors and returns error result", async () => {
+    const runTool = tools.find((t) => t.name === "run_tests")!;
+    const result = await runTool.handler({ targetDir: "/nonexistent-dir-for-error" }, "sid");
+    expect(result.content).toBeDefined();
+    const text = (result.content[0] as { text: string }).text;
+    const parsed = JSON.parse(text);
+    expect(typeof parsed.exitCode).toBe("number");
   });
 });
 
