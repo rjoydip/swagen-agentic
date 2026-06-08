@@ -29,7 +29,9 @@ Built on [`@earendil-works/pi-ai`](https://github.com/earendil-works/pi/tree/mai
 | **GitHub App server**   | Webhook-driven, real-time, multi-repo, improved error handling                             |
 | **Zero bloat**          | No chalk, commander, dedent, ora — all replaced by native Bun/Node utilities               |
 | **Audit trail**         | Every run persisted in `.swagen/runs/`                                                     |
-| **Full test suite**     | 308+ unit + integration tests with `bun test`                                              |
+| **MCP server**          | Exposes 13 tools over stdio or HTTP (SSE) — use with Claude Desktop, Cursor, VS Code, etc. |
+| **Shared tool helpers** | `src/shared/tool-helpers.ts` — 12 pure functions shared by AgentTools and MCP tools        |
+| **Full test suite**     | 464+ unit + integration tests with `bun test`                                              |
 
 ---
 
@@ -43,8 +45,9 @@ swagen/
 │   │   ├── spec.ts         — spec loader + route analyzer
 │   │   ├── codegen.ts      — Bun/Vitest test file generator
 │   │   ├── config.ts       — config file loader
-<<<<<<< HEAD
-│   │   └── augmenter.ts    — parseTestStructure, generateUnitTests, mergeTestFiles
+│   │   ├── schema.ts       — Zod config validation
+│   │   ├── prompts.ts      — LLM prompt templates
+│   │   └── postprocess.ts  — output cleanup (dedup, strip imports)
 │   ├── discovery/
 │   │   ├── index.ts        — discoverCodebase: walk → classify → extract → return CodebaseAnalysis
 │   │   ├── walker.ts       — recursive file walk with skip rules
@@ -56,14 +59,7 @@ swagen/
 │   │   ├── scanner.ts      — scan test files for entity references
 │   │   └── reporter.ts     — build/format coverage reports, group gaps
 │   ├── tools/
-│   │   ├── index.ts        — 16 AgentTools with TypeBox schemas + cache
-=======
-│   │   ├── schema.ts       — Zod config validation
-│   │   ├── prompts.ts      — LLM prompt templates
-│   │   └── postprocess.ts  — output cleanup (dedup, strip imports)
-│   ├── tools/
-│   │   ├── index.ts        — 12 AgentTools with TypeBox schemas + cache
->>>>>>> main
+│   │   ├── index.ts        — 17 AgentTools with TypeBox schemas + cache
 │   │   └── state.ts        — run record persistence (.swagen/runs/)
 │   ├── skills/             — swagen plugin modules (TypeScript)
 │   │   ├── manager.ts      — SkillManager: register, resolve, compose
@@ -81,6 +77,15 @@ swagen/
 │   │   ├── fmt.ts          — ANSI colour, spinner, parseArgs, dedent (no deps)
 │   │   └── errors.ts       — error helpers
 │   ├── cli.ts              — CLI: 11 commands (generate, run, validate, …)
+│   ├── shared/
+│   │   └── tool-helpers.ts — Shared logic between AgentTools and MCP tools
+│   ├── mcp/
+│   │   ├── index.ts        — MCP barrel exports
+│   │   ├── server.ts       — MCP server builder (SDK wrapper)
+│   │   ├── tools.ts        — 13 MCP tool definitions
+│   │   ├── transport.ts    — stdio + HTTP (SSE) transports
+│   │   ├── auth.ts         — Bearer token verification
+│   │   └── session.ts      — in-memory session state
 │   ├── bot/
 │   │   ├── cloudflare.ts   — Cloudflare bot
 │   │   ├── github.ts       — GitHub Actions bot + GitHub App webhook server
@@ -94,21 +99,23 @@ swagen/
 │   └── soap/SKILL.md
 ├── tests/
 │   ├── unit/
-│   │   ├── cache.test.ts   — FileCache, factory edge cases
-│   │   ├── cli.test.ts     — CLI helpers, config validation, error helpers
-│   │   ├── context.test.ts — detectContext
-│   │   ├── indexer.test.ts — buildIndex, searchIndex
+│   │   ├── cache.test.ts      — FileCache, factory edge cases
+│   │   ├── cli.test.ts        — CLI helpers, config validation, error helpers
+│   │   ├── context.test.ts    — detectContext
+│   │   ├── indexer.test.ts    — buildIndex, searchIndex
+│   │   ├── mcp.test.ts        — MCP session, auth, tools, server (30 tests)
 │   │   ├── orchestrator.test.ts — runParallel, splitAndGenerate
 │   │   ├── postprocess.test.ts — dedup, strip unused imports
-│   │   ├── prompts.test.ts — prompt templates
-│   │   ├── skills.test.ts  — SkillManager, built-in skills
-│   │   ├── spec.test.ts    — analyzeSpec, generateTestFiles
-│   │   ├── state.test.ts   — saveRunRecord, listRunRecords, getLastRun
-│   │   ├── storage.test.ts — MemoryStorage, FileStorage, RedisStorage
-│   │   ├── tools.test.ts   — createTools shape + execution
-│   │   └── utils.test.ts   — parseArgs, MemoryCache, cacheKey, withCache
+│   │   ├── prompts.test.ts    — prompt templates
+│   │   ├── skills.test.ts     — SkillManager, built-in skills
+│   │   ├── spec.test.ts       — analyzeSpec, generateTestFiles
+│   │   ├── state.test.ts      — saveRunRecord, listRunRecords, getLastRun
+│   │   ├── storage.test.ts    — MemoryStorage, FileStorage, RedisStorage
+│   │   ├── tools.test.ts      — createTools shape + execution
+│   │   └── utils.test.ts      — parseArgs, MemoryCache, cacheKey, withCache
 │   └── integration/
-│       └── harness.test.ts — SwagenHarness session lifecycle + full pipeline
+│       ├── harness.test.ts    — SwagenHarness session lifecycle + full pipeline
+│       └── mcp.test.ts        — MCP server stdio transport (12 tests)
 ├── docs/
 │   ├── github-app.md       — GitHub App registration + configuration guide
 │   ├── architecture.md     — Architecture overview
@@ -200,6 +207,12 @@ swagen resume <session-id> --prompt "Also generate tests for the /admin endpoint
 # 10. Cache management
 swagen cache          # show stats
 swagen cache clear    # clear all cached entries
+
+# 11. Start MCP server (stdio — for Claude Desktop, Cursor, VS Code)
+swagen mcp --stdio
+
+# 12. Start MCP server (HTTP — for remote clients, with Bearer auth)
+swagen mcp --port 3000 --token sk-secret
 ```
 
 ---
@@ -229,6 +242,11 @@ swagen sessions              List stored sessions
 swagen status                Last run summary
 swagen cache [clear]         Cache stats or clear
 swagen init                  Create swagen.config.ts
+swagen mcp                   Start MCP server
+  --stdio                     Use stdio transport (for Claude Desktop, Cursor)
+  --port <number>             HTTP port (default: 3000)
+  --token <value>             Bearer token for HTTP auth (auto-generated if omitted)
+  --generate-token            Generate a bearer token and exit
 swagen help                  Show this help
 ```
 
@@ -248,6 +266,7 @@ Each example in [`examples/`](examples/) is self-contained and demonstrates one 
 | [`storage.ts`](examples/storage.ts)               | Storage backends: `MemoryStorage`, `FileStorage`, session CRUD           |
 | [`hooks.ts`](examples/hooks.ts)                   | Hook pipeline: `applyBeforeGenerateHooks` / `applyAfterGenerateHooks`    |
 | [`cache.ts`](examples/cache.ts)                   | Cache backends (memory, file, noop), key generation, `withCache` wrapper |
+| [`mcp-server.ts`](examples/mcp-server.ts)         | Start swagen as an MCP server (stdio + HTTP) with all 13 tools           |
 
 ### Quick reference
 
@@ -330,6 +349,12 @@ const config: Partial<SwagenConfig> = {
     maxEntries: 256, // memory LRU limit
   },
 
+  // MCP server configuration (optional)
+  mcp: {
+    port: 3000,
+    authToken: "sk-my-secret", // optional Bearer token for HTTP transport
+  },
+
   // User-defined skills (optional)
   skills: [{ from: "./skills/my-custom-skill.ts" }],
 };
@@ -358,25 +383,70 @@ export default config;
 
 Active skills can register **additional tools** at runtime — see [`docs/skills.md`](docs/skills.md).
 
+### MCP tools
+
+When running as an MCP server (`swagen mcp`), swagen exposes **13 tools** — see the [MCP server](#mcp-server) section above. These include fine-grained operations (validate, analyze, generate, write, run) and high-level convenience tools (full pipeline, augment, coverage report).
+
 ---
 
 ## Testing
 
 ```bash
-# All tests
+# All tests (464+)
 bun test
 
 # Unit only (no LLM needed)
 bun test:unit
 
-# Integration (requires ANTHROPIC_API_KEY)
+# Integration (requires ANTHROPIC_API_KEY for some, MCP tests run standalone)
 bun test:int
+
+# MCP-specific tests
+bun test tests/unit/mcp.test.ts        # 30 unit tests
+bun test tests/integration/mcp.test.ts # 12 integration tests (stdio transport)
 
 # Watch mode
 bun test:watch
 ```
 
-Integration tests that require a real LLM key are automatically skipped when `ANTHROPIC_API_KEY` is not set.
+Integration tests that require a real LLM key are automatically skipped when `ANTHROPIC_API_KEY` is not set. The MCP integration tests spawn the MCP server as a subprocess and communicate over stdio — no LLM key needed.
+
+---
+
+## MCP server
+
+swagen implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) to expose its test-generation capabilities to AI assistants. The MCP server can run over **stdio** (for local tools like Claude Desktop, Cursor, VS Code) or **HTTP with SSE** (for remote clients).
+
+See [`docs/mcp.md`](docs/mcp.md) for the full MCP documentation — tool reference, transport modes, session model, architecture, configuration, and shared helper reference.
+
+### Quick usage
+
+```bash
+swagen mcp --stdio                                    # stdio (Claude Desktop, Cursor)
+swagen mcp --port 3000                                # HTTP with auto-generated token
+swagen mcp --port 3000 --token sk-abc123              # HTTP with explicit token
+swagen mcp --generate-token                           # Generate a token without starting the server
+```
+
+### 13 MCP tools
+
+| Tool                   | Type       | Description                                      |
+| ---------------------- | ---------- | ------------------------------------------------ |
+| `validate_spec`        | Fine       | Validate an OpenAPI spec                         |
+| `analyze_spec`         | Fine       | Load + analyze spec, return endpoints            |
+| `generate_tests`       | Fine       | Generate test source from analyzed endpoints     |
+| `write_test_files`     | Fine       | Write generated files to disk                    |
+| `run_tests`            | Fine       | Execute tests via Bun/Vitest                     |
+| `read_source_file`     | Fine       | Read any file for context                        |
+| `search_project_files` | Fine       | Regex search across project files                |
+| `analyze_codebase`     | Fine       | Discover code entities in the project            |
+| `check_test_coverage`  | Fine       | Scan tests for coverage gaps                     |
+| `generate_from_spec`   | High-level | Full pipeline: load → analyze → generate → write |
+| `augment_tests`        | High-level | Discover code → analyze → augment existing tests |
+| `coverage_report`      | High-level | Full coverage analysis with report               |
+| `get_run_history`      | Utility    | List past swagen run records                     |
+
+Logic common to MCP tools and AgentTools lives in `src/shared/tool-helpers.ts` — 12 pure functions (`runTestRunner`, `writeGeneratedFiles`, `parseTestOutput`, `searchProjectFiles`, etc.) extracted from duplicate code across both tool implementations.
 
 ---
 

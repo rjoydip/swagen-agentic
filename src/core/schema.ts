@@ -29,6 +29,11 @@ const SkillConfigItem = z.object({
   from: z.string().min(1),
 });
 
+const McpConfig = z.object({
+  port: z.number().int().positive().default(3000),
+  authToken: z.string().optional(),
+});
+
 export const SwagenConfigSchema = z.object({
   baseUrl: z.string().min(1),
   runner: TestRunner,
@@ -48,6 +53,7 @@ export const SwagenConfigSchema = z.object({
   storage: StorageConfig,
   cache: CacheConfig,
   skills: z.array(SkillConfigItem).optional(),
+  mcp: McpConfig.optional(),
 });
 
 export class ConfigValidationError extends Error {

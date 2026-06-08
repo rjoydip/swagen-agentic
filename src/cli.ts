@@ -33,7 +33,7 @@ import {
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 
-const VERSION = JSON.parse(await Bun.file(join(import.meta.dir, "../../package.json")).text())
+const VERSION = JSON.parse(await Bun.file(join(import.meta.dir!, "../package.json")).text())
   .version as string;
 
 const COMMANDS: CommandDef[] = [
@@ -147,6 +147,26 @@ const COMMANDS: CommandDef[] = [
       { cmd: "swagen bench openapi.yaml --iterations 10", desc: "Run 10 benchmark iterations" },
     ],
   },
+  {
+    name: "mcp",
+    args: "",
+    description:
+      "Start the MCP server (stdio or HTTP mode). Use --stdio for Claude Desktop/Cursor.",
+    flags: [
+      { flag: "--stdio", description: "Use stdio transport (default)" },
+      { flag: "--port <number>", description: "HTTP port (default: 3000)" },
+      {
+        flag: "--token <value>",
+        description: "Bearer token for HTTP auth (auto-generated if omitted)",
+      },
+      { flag: "--generate-token", description: "Generate a bearer token and exit" },
+    ],
+    examples: [
+      { cmd: "swagen mcp --stdio", desc: "Start stdio MCP server for local clients" },
+      { cmd: "swagen mcp --port 3000 --token sk-secret", desc: "Start HTTP MCP server with auth" },
+      { cmd: "swagen mcp --generate-token", desc: "Generate a new bearer token" },
+    ],
+  },
   { name: "discover", args: "[dir]", description: "Discover and display project code structure" },
   { name: "coverage", args: "[dir]", description: "Show existing test coverage gaps" },
   { name: "analyze", args: "<entity>", description: "Deep analysis of a code entity" },
@@ -208,6 +228,8 @@ async function main() {
       return cmdBench(positionals[0], config, flags);
     case "init":
       return cmdInit();
+    case "mcp":
+      return cmdMcp(config, flags);
     case "discover":
       return cmdDiscover(positionals[0]);
     case "coverage":
@@ -534,12 +556,16 @@ async function cmdBench(
   );
 }
 
+function cmdCwd(dir: string | undefined) {
+  return dir ? join(process.cwd(), dir) : process.cwd();
+}
+
 // ─── discover ──────────────────────────────────────────────────────────────────
 
 async function cmdDiscover(dir: string | undefined) {
   const { discoverCodebase, formatDiscoveryPrompt, formatEntitySummary } =
     await import("./discovery/index.ts");
-  const cwd = dir ? join(process.cwd(), dir) : process.cwd();
+  const cwd = cmdCwd(dir);
   const spinner = createSpinner(`Discovering code in ${cwd}...`);
   try {
     const analysis = discoverCodebase({ ...(dir ? { discoveryPath: dir } : {}) });
@@ -565,7 +591,7 @@ async function cmdCoverage(dir: string | undefined) {
   const { generateCoverageReport, enrichAnalysisWithCoverage } =
     await import("./coverage/index.ts");
 
-  const cwd = dir ? join(process.cwd(), dir) : process.cwd();
+  const cwd = cmdCwd(dir);
   const spinner = createSpinner(`Analyzing coverage in ${cwd}...`);
   try {
     const analysis = discoverCodebase({
@@ -636,6 +662,47 @@ async function cmdAnalyze(entity: string | undefined) {
   } catch (err) {
     spinner.fail(friendlyError(err));
     process.exit(1);
+  }
+}
+
+// ─── mcp ───────────────────────────────────────────────────────────────────────
+
+async function cmdMcp(cfg: SwagenConfig, flags: Record<string, string | boolean>) {
+  const { generateBearerToken } = await import("./mcp/auth.ts");
+
+  if (flags["generate-token"] === true) {
+    const t = generateBearerToken();
+    process.stdout.write(t + "\n");
+    return;
+  }
+
+  const useStdio = flags["stdio"] === true;
+  const port =
+    typeof flags["port"] === "string" ? parseInt(flags["port"], 10) : (cfg.mcp?.port ?? 3000);
+  let token = typeof flags["token"] === "string" ? flags["token"] : cfg.mcp?.authToken;
+
+  if (!token) {
+    token = generateBearerToken();
+    process.stderr.write(ansi.yellow(`Auto-generated token: ${token}\n`));
+    process.stderr.write(
+      ansi.gray("Use this token in your MCP client's Authorization header.\n\n"),
+    );
+  }
+
+  const { buildServer } = await import("./mcp/server.ts");
+  const { startStdio, startHttp } = await import("./mcp/transport.ts");
+
+  const { server } = await buildServer({ config: cfg });
+
+  if (useStdio) {
+    process.stderr.write(ansi.green("Starting MCP server (stdio)...\n"));
+    process.stderr.write(ansi.gray("Connect via Claude Desktop or any MCP client.\n"));
+    await startStdio(server);
+  } else {
+    process.stderr.write(ansi.green(`Starting MCP server on http://localhost:${port}/mcp\n`));
+    process.stderr.write(ansi.gray("Bearer token authentication enabled.\n"));
+    process.stderr.write(ansi.gray("Health check: http://localhost:PORT/health\n"));
+    await startHttp(server, { port, authToken: token });
   }
 }
 

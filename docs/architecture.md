@@ -46,23 +46,34 @@ swagen is an **agentic application**: an LLM agent driven by `@earendil-works/pi
                          │  calls
                          ▼
 ┌────────────────────────────────────────────────────────────┐
-│                  AgentTools (src/tools)                    │
-│  Each tool: AgentTool<T> with TypeBox schema               │
+│               AgentTools (src/tools)       MCP Tools       │
+│                  │                            │            │
+│                  │     ┌──────────────────────┘            │
+│                  │     │  src/mcp/tools.ts                  │
+│                  ▼     ▼                                   │
+│         ┌──────────────────────────┐                       │
+│         │  src/shared/             │                       │
+│         │  tool-helpers.ts         │                       │
+│         │                          │                       │
+│         │  runTestRunner()         │  writeGeneratedFiles()│
+│         │  parseTestOutput()       │  mapEndpointsToSumm() │
+│         │  searchProjectFiles()    │  filterEntitiesByNam()│
+│         │  discoverAndEnrich()     │  generateAndMergeTst()│
+│         │  getTestFilePaths()      │  isFileProtected()    │
+│         │  ensureDirForFile()      │  PROTECTED_FILES      │
+│         └──────────────────────────┘                       │
 │                                                            │
-│  validate_spec       — swagger-parser validate             │
-│  load_spec           — swagger-parser dereference + cache  │
+│  validate_spec       — loadSpec() + validate               │
+│  load_spec           — loadSpec() + cache                  │
 │  analyze_endpoints   — analyzeSpec() + cache               │
 │  generate_tests      — generateTestFiles() + cache         │
-│  write_files         — Bun.write() + protected file guard  │
-│  run_tests           — Bun.spawn(bun test | vitest run)    │
-│  read_file           — Bun.file().text()                   │
-│  get_run_history     — .swagen/runs/ glob                  │
-│  cache_stats         — ICache.stats()                      │
+│  write_files         — writeGeneratedFiles()               │
+│  run_tests           — runTestRunner()                     │
+│  search_files        — searchProjectFiles()                │
+│  get_run_history     — listRunRecords()                    │
 │  discover_code       — discoverCodebase() + cache          │
-│  analyze_entity      — entity deep-dive + cache            │
-│  check_coverage      — scanCoverage() + cache              │
-│  read_existing_tests — parse existing test files           │
-│  augment_tests       — generateUnitTests() + mergeTestFiles│
+│  check_coverage      — discoverAndEnrich()                 │
+│  augment_tests       — generateAndMergeTests()             │
 └───────────┬──────────────────────────┬─────────────────────┘
             │                          │
    ┌────────▼────────┐       ┌─────────▼──────────┐
@@ -185,6 +196,72 @@ The `MemoryCache` is an LRU with configurable `maxEntries`. The `FileCache` stor
 ---
 
 ---
+
+---
+
+## MCP server
+
+swagen can run as an [MCP server](https://modelcontextprotocol.io) exposing 13 tools over stdio or HTTP/SSE. The MCP tools share logic with the AgentTools through `src/shared/tool-helpers.ts` — a set of 12 pure functions extracted from duplicate code across both tool implementations.
+
+### Architecture
+
+```sh
+MCP Client (Claude Desktop, Cursor, ChatGPT, etc.)
+       │
+       ├── stdio ──► StdioServerTransport
+       │                  │
+       └── HTTP/SSE ──► WebStandardStreamableHTTPServerTransport
+                              │
+                        Bun.serve() :port
+                              │
+                        Bearer auth (optional)
+                              │
+                              ▼
+                    ┌─────────────────────┐
+                    │ src/mcp/server.ts   │
+                    │ (MCP Server wrapper)│
+                    └────────┬────────────┘
+                             │
+                    ┌────────┴────────┐
+                    │ src/mcp/        │
+                    │ tools.ts        │
+                    │ session.ts      │
+                    │ transport.ts    │
+                    │ auth.ts         │
+                    └────────┬────────┘
+                             │ calls
+                             ▼
+                    ┌─────────────────────┐
+                    │ src/shared/         │
+                    │ tool-helpers.ts     │
+                    └────────┬────────────┘
+                             │
+                    ┌────────┴────────┐
+                    │ src/core/       │
+                    │ (spec, codegen, │
+                    │  augmenter, …)  │
+                    └─────────────────┘
+```
+
+### Shared helpers
+
+`src/shared/tool-helpers.ts` provides 12 exported functions that eliminate duplication between `src/tools/index.ts` (AgentTools) and `src/mcp/tools.ts` (MCP tools):
+
+| Helper                  | Eliminates duplicate from | Purpose                                   |
+| ----------------------- | ------------------------- | ----------------------------------------- |
+| `mapEndpointsToSummary` | both files (9 lines)      | Transform endpoints to summary format     |
+| `parseTestOutput`       | both files (21 lines)     | Parse test runner stdout/stderr           |
+| `runTestRunner`         | both files (21 lines)     | Spawn Bun/Vitest, return parsed output    |
+| `writeGeneratedFiles`   | both files (8 lines)      | Write files with protected file guard     |
+| `generateAndMergeTests` | both files (17 lines)     | Generate + merge unit test files          |
+| `filterEntitiesByNames` | both files (9 lines)      | Filter entities by name list              |
+| `searchProjectFiles`    | both files (9 lines)      | Scan project files with regex             |
+| `discoverAndEnrich`     | mcp internal (10 lines)   | Discover code + enrich with test coverage |
+| `getTestFilePaths`      | mcp internal              | Walk project for test file paths          |
+| `isFileProtected`       | both files (8 lines)      | Check if file is protected (setup.ts etc) |
+| `ensureDirForFile`      | both files                | Create parent directories for a file      |
+
+See [`docs/mcp.md`](mcp.md) for full MCP documentation.
 
 ## Skills system
 
