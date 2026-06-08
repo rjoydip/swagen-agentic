@@ -35,7 +35,8 @@ export async function buildServer(opts: McpServerOptions = {}) {
         isError: true,
       };
     }
-    const sessionId = (request.params.arguments?.["_sessionId"] as string) ?? "default";
+    const raw = request.params.arguments?.["_sessionId"];
+    const sessionId = typeof raw === "string" ? raw : "default";
     try {
       return await tool.handler(request.params.arguments ?? {}, sessionId);
     } catch (err) {

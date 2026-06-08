@@ -33,7 +33,7 @@ import {
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 
-const VERSION = JSON.parse(await Bun.file(join(import.meta.dir!, "../package.json")).text())
+const VERSION = JSON.parse(await Bun.file(join(import.meta.dir ?? ".", "../package.json")).text())
   .version as string;
 
 const COMMANDS: CommandDef[] = [

@@ -12,7 +12,7 @@ import {
   unauthorizedResponse,
 } from "../../src/mcp/auth.ts";
 import { buildMcpTools } from "../../src/mcp/tools.ts";
-import type { SwagenConfig } from "../../src/core/types.ts";
+import type { ResolvedEndpoint, SwagenConfig } from "../../src/core/types.ts";
 import { buildServer } from "../../src/mcp/server.ts";
 
 // ─── Mock config ──────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ describe("mcp/session", () => {
     const session = getOrCreateSession("mutable");
     session.endpoints = [];
     expect(session.endpoints).toEqual([]);
-    session.endpoints = [{ operationId: "getFoo" } as any];
+    session.endpoints = [{ operationId: "getFoo" } as unknown as ResolvedEndpoint];
     expect(session.endpoints).toHaveLength(1);
   });
 
@@ -224,7 +224,7 @@ describe("mcp/tools", () => {
     const result = await tool.handler({ path: "package.json" }, "test-sid");
     expect(result.isError).toBeUndefined();
     expect(result.content).toBeDefined();
-    const text = (result.content[0] as any).text;
+    const text = (result.content[0] as { text: string }).text;
     expect(text).toContain("swagen");
   });
 
@@ -254,7 +254,7 @@ describe("mcp/tools", () => {
       "test-sid",
     );
     expect(result.isError).toBeUndefined();
-    const text = (result.content[0] as any).text;
+    const text = (result.content[0] as { text: string }).text;
     const parsed = JSON.parse(text);
     expect(parsed.matchCount).toBeGreaterThan(0);
   });
@@ -263,7 +263,7 @@ describe("mcp/tools", () => {
     const tool = tools.find((t) => t.name === "analyze_codebase")!;
     const result = await tool.handler({ discoveryPath: "src" }, "test-sid");
     expect(result.isError).toBeUndefined();
-    const text = (result.content[0] as any).text;
+    const text = (result.content[0] as { text: string }).text;
     const parsed = JSON.parse(text);
     expect(parsed.entityCount).toBeGreaterThan(0);
     expect(parsed.framework).toBeDefined();
@@ -273,7 +273,7 @@ describe("mcp/tools", () => {
     const tool = tools.find((t) => t.name === "check_test_coverage")!;
     const result = await tool.handler({ discoveryPath: "src" }, "test-sid");
     expect(result.isError).toBeUndefined();
-    const text = (result.content[0] as any).text;
+    const text = (result.content[0] as { text: string }).text;
     const parsed = JSON.parse(text);
     expect(typeof parsed.totalEntities).toBe("number");
     expect(typeof parsed.totalGaps).toBe("number");
@@ -283,7 +283,7 @@ describe("mcp/tools", () => {
     const tool = tools.find((t) => t.name === "coverage_report")!;
     const result = await tool.handler({ discoveryPath: "src" }, "test-sid");
     expect(result.isError).toBeUndefined();
-    const text = (result.content[0] as any).text;
+    const text = (result.content[0] as { text: string }).text;
     const parsed = JSON.parse(text);
     expect(typeof parsed.totalEntities).toBe("number");
     expect(typeof parsed.uncoveredCount).toBe("number");
@@ -294,7 +294,7 @@ describe("mcp/tools", () => {
     const tool = tools.find((t) => t.name === "get_run_history")!;
     const result = await tool.handler({ limit: 5 }, "test-sid");
     expect(result.isError).toBeUndefined();
-    const text = (result.content[0] as any).text;
+    const text = (result.content[0] as { text: string }).text;
     const parsed = JSON.parse(text);
     expect(Array.isArray(parsed.records)).toBe(true);
   });
@@ -303,7 +303,7 @@ describe("mcp/tools", () => {
     const tool = tools.find((t) => t.name === "generate_from_spec")!;
     const result = await tool.handler({ source: "nonexistent.yaml" }, "test-sid");
     expect(result.isError).toBe(true);
-    const text = (result.content[0] as any).text;
+    const text = (result.content[0] as { text: string }).text;
     expect(text).toContain("Error");
   });
 
@@ -325,9 +325,27 @@ describe("mcp/server", () => {
     expect(tools.length).toBeGreaterThan(0);
   });
 
-  it("server info is set correctly", async () => {
+  it("server has registered tool/call and tools/list handlers", async () => {
     const { server } = await buildServer({ config: TEST_CONFIG });
     expect(server).toBeDefined();
+
+    // Verify handlers exist by checking the registered request handlers
+    const handlers = (server as any)["_requestHandlers"];
+    expect(handlers?.has("tools/list")).toBe(true);
+    expect(handlers?.has("tools/call")).toBe(true);
+  });
+
+  it("server has registered all tool names from tools list", async () => {
+    const { server, tools } = await buildServer({ config: TEST_CONFIG });
+    const handlers = (server as any)["_requestHandlers"];
+    const callHandler = handlers?.get("tools/call");
+    expect(callHandler).toBeDefined();
+
+    const names = tools.map((t) => t.name).sort();
+    expect(names).toContain("validate_spec");
+    expect(names).toContain("analyze_spec");
+    expect(names).toContain("generate_tests");
+    expect(names).toContain("write_test_files");
   });
 });
 
@@ -346,7 +364,7 @@ describe("mcp tools — pipeline integration", () => {
 
     const coverageResult = await coverageTool.handler({ discoveryPath: "src" }, sid);
     expect(coverageResult.isError).toBeUndefined();
-    const text = (coverageResult.content[0] as any).text;
+    const text = (coverageResult.content[0] as { text: string }).text;
     const parsed = JSON.parse(text);
     expect(parsed.totalEntities).toBeGreaterThan(0);
   }, 30000);

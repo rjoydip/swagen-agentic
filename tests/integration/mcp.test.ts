@@ -91,14 +91,14 @@ class McpStdioClient {
       this.pending.set(id, { resolve, reject });
     });
 
-    (this.proc.stdin as any).write(JSON.stringify(req) + "\n");
+    const stdin = this.proc.stdin as unknown as { write(data: string): void };
+    stdin.write(JSON.stringify(req) + "\n");
     return promise;
   }
 
   async close() {
     this.closed = true;
     this.proc.kill("SIGTERM");
-    (this.proc.stdin as any)?.end?.();
     await this.reader.cancel().catch(() => {});
   }
 }
@@ -308,21 +308,34 @@ describe("MCP token generation (CLI)", () => {
   });
 
   it("auto-generates token when --token is omitted in HTTP mode", async () => {
-    // Use port 0 to avoid port conflicts (Bun picks a random free port)
     const proc = Bun.spawn(["bun", "run", CLI_ENTRY, "mcp", "--port", "0"], {
       stdout: "pipe",
       stderr: "pipe",
     });
 
-    // Kill after a short time — we just want to capture the auto-generated token line
-    setTimeout(() => {
-      proc.kill("SIGTERM");
-    }, 2000);
+    const stderrReader = (proc.stderr as any).getReader();
+    const decoder = new TextDecoder();
+    const lines: string[] = [];
+    let tokenFound = false;
 
-    const stderr = await new Response(proc.stderr).text();
-    await proc.exited;
-    expect(stderr).toContain("Auto-generated token:");
-    expect(stderr).toMatch(/[0-9a-f]{64}/);
+    while (true) {
+      const { done, value } = await stderrReader.read(); // eslint-disable-line no-await-in-loop
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split("\n")) {
+        if (line.includes("Auto-generated token:")) {
+          tokenFound = true;
+          expect(line).toMatch(/[0-9a-f]{64}/);
+          proc.kill("SIGTERM");
+        }
+        lines.push(line);
+      }
+      if (tokenFound) break;
+    }
+
+    // Drain remaining stderr
+    await stderrReader.cancel().catch(() => {});
+    expect(tokenFound).toBe(true);
   });
 
   it("explicit --token is used instead of auto-generation", async () => {
@@ -334,13 +347,27 @@ describe("MCP token generation (CLI)", () => {
       },
     );
 
-    setTimeout(() => {
-      proc.kill("SIGTERM");
-    }, 2000);
+    const stderrReader = (proc.stderr as any).getReader();
+    const decoder = new TextDecoder();
+    const lines: string[] = [];
+    let authFound = false;
 
-    const stderr = await new Response(proc.stderr).text();
+    while (true) {
+      const { done, value } = await stderrReader.read(); // eslint-disable-line no-await-in-loop
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split("\n")) {
+        if (line.includes("Bearer token authentication enabled")) {
+          authFound = true;
+          expect(line).not.toContain("Auto-generated token");
+          proc.kill("SIGTERM");
+        }
+        lines.push(line);
+      }
+      if (authFound) break;
+    }
 
-    expect(stderr).not.toContain("Auto-generated token:");
-    expect(stderr).toContain("Bearer token authentication enabled");
+    await stderrReader.cancel().catch(() => {});
+    expect(authFound).toBe(true);
   });
 });

@@ -140,7 +140,9 @@ export async function searchProjectFiles(
           count++;
         }
       }
-    } catch {}
+    } catch (e) {
+      console.warn(`searchProjectFiles: Failed to read ${file}: ${e}`);
+    }
   }
 
   return results;
