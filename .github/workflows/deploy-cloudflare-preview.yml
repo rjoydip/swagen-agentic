@@ -44,7 +44,7 @@ jobs:
         with:
           script: |
             const deploymentUrl = `${{ steps.deploy.outputs.deployment-url }}`;
-            const url = deploymentUrl ? `https://${deploymentUrl}` : 'https://<worker-url-not-available>';
+            const url = deploymentUrl || 'https://<worker-url-not-available>';
             const body = `🚀 **Preview Deployment Ready**\n\nWorker URL: ${url}\n\n_Deployed from commit ${context.sha.slice(0,7)}_`;
 
             // Find existing comment
