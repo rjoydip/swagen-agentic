@@ -40,10 +40,10 @@ jobs:
         uses: anomalyco/opencode/github@76c631d198f9ff620e15468e45f3457d50481b57 # v1.16.2
         timeout-minutes: 10
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           share: true
-          use_GH_TOKEN: true
+          use_github_token: true
           model: ${{ vars.OPENCODE_MODEL || 'opencode/big-pickle' }}
           prompt: |
             You are performing a professional code review for a pull request. Review ONLY the changes shown in the diff below — do not comment on unchanged code. Your goal is to provide clear, actionable, and structured feedback.

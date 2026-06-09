@@ -10,10 +10,10 @@ swagen <command> [arguments] [options]
 
 ## Global Options
 
-| Option | Description |
-|--------|-------------|
-| `--version`, `-v` | Show version number |
-| `--help`, `-h` | Show help for a command |
+| Option            | Description             |
+| ----------------- | ----------------------- |
+| `--version`, `-v` | Show version number     |
+| `--help`, `-h`    | Show help for a command |
 
 ---
 
@@ -29,24 +29,24 @@ swagen generate <spec> [options]
 
 **Arguments:**
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `<spec>` | Yes* | Path or URL to OpenAPI/Swagger spec (*not required with `--existing`) |
+| Argument | Required | Description                                                            |
+| -------- | -------- | ---------------------------------------------------------------------- |
+| `<spec>` | Yes\*    | Path or URL to OpenAPI/Swagger spec (\*not required with `--existing`) |
 
 **Options:**
 
-| Flag | Description |
-|------|-------------|
-| `--existing` | Enable codebase mode (discover existing code instead of spec) |
-| `--provider <name>` | AI provider (e.g. anthropic, openai, opencode) |
-| `--model <id>` | AI model id |
-| `--out-dir, -o <dir>` | Output directory for generated tests |
-| `--runner, -r <name>` | Test runner (`bun` or `vitest`) |
-| `--dry-run` | Preview generated files without writing them |
-| `--parallel <N>` | Run N parallel agents |
-| `--verbose` | Stream all agent events |
-| `--augment` | Augment existing test files |
-| `--augment-strategy <s>` | Augmentation strategy (`smart-merge`, `append`, `separate`) |
+| Flag                     | Description                                                   |
+| ------------------------ | ------------------------------------------------------------- |
+| `--existing`             | Enable codebase mode (discover existing code instead of spec) |
+| `--provider <name>`      | AI provider (e.g. anthropic, openai, opencode)                |
+| `--model <id>`           | AI model id                                                   |
+| `--out-dir, -o <dir>`    | Output directory for generated tests                          |
+| `--runner, -r <name>`    | Test runner (`bun` or `vitest`)                               |
+| `--dry-run`              | Preview generated files without writing them                  |
+| `--parallel <N>`         | Run N parallel agents                                         |
+| `--verbose`              | Stream all agent events                                       |
+| `--augment`              | Augment existing test files                                   |
+| `--augment-strategy <s>` | Augmentation strategy (`smart-merge`, `append`, `separate`)   |
 
 **Examples:**
 
@@ -121,17 +121,17 @@ swagen resume <id> --prompt <text> [options]
 
 **Arguments:**
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `<id>` | Yes | Session ID to resume |
+| Argument | Required | Description          |
+| -------- | -------- | -------------------- |
+| `<id>`   | Yes      | Session ID to resume |
 
 **Options:**
 
-| Flag | Description |
-|------|-------------|
+| Flag                  | Description                      |
+| --------------------- | -------------------------------- |
 | `--prompt, -p <text>` | Follow-up instruction (required) |
-| `--provider <name>` | AI provider |
-| `--model <id>` | Model id |
+| `--provider <name>`   | AI provider                      |
+| `--model <id>`        | Model id                         |
 
 **Examples:**
 
@@ -194,10 +194,10 @@ swagen cache [clear]
 
 **Subcommands:**
 
-| Command | Description |
-|---------|-------------|
-| `swagen cache` | Show cache hit/miss stats |
-| `swagen cache clear` | Clear all cached entries |
+| Command              | Description               |
+| -------------------- | ------------------------- |
+| `swagen cache`       | Show cache hit/miss stats |
+| `swagen cache clear` | Clear all cached entries  |
 
 **Output:**
 
@@ -221,9 +221,9 @@ swagen index [dir]
 
 **Arguments:**
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `<dir>` | No | Directory to index (defaults to current directory) |
+| Argument | Required | Description                                        |
+| -------- | -------- | -------------------------------------------------- |
+| `<dir>`  | No       | Directory to index (defaults to current directory) |
 
 **Examples:**
 
@@ -262,14 +262,14 @@ swagen bench <spec> [options]
 
 **Arguments:**
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `<spec>` | Yes | Path or URL to OpenAPI/Swagger spec |
+| Argument | Required | Description                         |
+| -------- | -------- | ----------------------------------- |
+| `<spec>` | Yes      | Path or URL to OpenAPI/Swagger spec |
 
 **Options:**
 
-| Flag | Description |
-|------|-------------|
+| Flag               | Description                           |
+| ------------------ | ------------------------------------- |
 | `--iterations <N>` | Number of benchmark runs (default: 3) |
 
 **Examples:**
@@ -305,12 +305,12 @@ swagen mcp [options]
 
 **Options:**
 
-| Flag | Description |
-|------|-------------|
-| `--stdio` | Use stdio transport (default) |
-| `--port <number>` | HTTP port (default: 3000) |
-| `--token <value>` | Bearer token for HTTP auth (auto-generated if omitted) |
-| `--generate-token` | Generate a bearer token and exit |
+| Flag               | Description                                            |
+| ------------------ | ------------------------------------------------------ |
+| `--stdio`          | Use stdio transport (default)                          |
+| `--port <number>`  | HTTP port (default: 3000)                              |
+| `--token <value>`  | Bearer token for HTTP auth (auto-generated if omitted) |
+| `--generate-token` | Generate a bearer token and exit                       |
 
 **Examples:**
 
@@ -337,9 +337,9 @@ swagen discover [dir]
 
 **Arguments:**
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `<dir>` | No | Directory to discover (defaults to current directory) |
+| Argument | Required | Description                                           |
+| -------- | -------- | ----------------------------------------------------- |
+| `<dir>`  | No       | Directory to discover (defaults to current directory) |
 
 **Examples:**
 
@@ -360,9 +360,9 @@ swagen coverage [dir]
 
 **Arguments:**
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `<dir>` | No | Directory to analyze (defaults to current directory) |
+| Argument | Required | Description                                          |
+| -------- | -------- | ---------------------------------------------------- |
+| `<dir>`  | No       | Directory to analyze (defaults to current directory) |
 
 **Examples:**
 
@@ -383,9 +383,9 @@ swagen analyze <entity>
 
 **Arguments:**
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `<entity>` | Yes | Name of the entity to analyze |
+| Argument   | Required | Description                   |
+| ---------- | -------- | ----------------------------- |
+| `<entity>` | Yes      | Name of the entity to analyze |
 
 **Examples:**
 
@@ -449,4 +449,4 @@ See [environment-variables.md](./environment-variables.md) for complete referenc
 
 ---
 
-*Created: 2025-06-09*
+_Created: 2025-06-09_

@@ -4,12 +4,12 @@ Tests for the Cloudflare Worker webhook handler.
 
 ## Test Files
 
-| File | Description |
-|------|-------------|
-| `tests/cloudflare-worker.test.ts` | Unit tests for webhook handler |
-| `tests/cloudflare-worker-integration.test.ts` | Integration tests with real Web Crypto API |
-| `scripts/test-webhook.ts` | TypeScript script for manual webhook testing |
-| `scripts/test-webhook.sh` | Shell script alternative (requires bash + openssl) |
+| File                                          | Description                                        |
+| --------------------------------------------- | -------------------------------------------------- |
+| `tests/cloudflare-worker.test.ts`             | Unit tests for webhook handler                     |
+| `tests/cloudflare-worker-integration.test.ts` | Integration tests with real Web Crypto API         |
+| `scripts/test-webhook.ts`                     | TypeScript script for manual webhook testing       |
+| `scripts/test-webhook.sh`                     | Shell script alternative (requires bash + openssl) |
 
 ## Running Tests
 
@@ -128,5 +128,5 @@ echo -n '{"test":true}' | openssl dgst -sha256 -hmac "your-secret"
 
 ---
 
-*Created: 2025-06-09*
-*Updated: 2025-06-09 (added Bun-based test script)*
+_Created: 2025-06-09_
+_Updated: 2025-06-09 (added Bun-based test script)_
