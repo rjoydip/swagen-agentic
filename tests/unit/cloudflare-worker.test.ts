@@ -341,28 +341,33 @@ describe("Cloudflare Worker", () => {
   });
 
   test("supports all spec file types", async () => {
-    for (const specFile of SPEC_FILES) {
-      const dispatchFn = mock(() => Promise.resolve());
-      const body = JSON.stringify({
-        repository: { full_name: "owner/repo" },
-        commits: [{ added: [specFile], modified: [] }],
-      });
-      const sig = await createSignature(testSecret, body);
-      const req = new Request("https://example.com/webhook", {
-        method: "POST",
-        headers: {
-          "x-hub-signature-256": sig,
-          "x-github-event": "push",
-        },
-        body,
-      });
-      const res = await handleRequest(req, env, dispatchFn);
+    const results = await Promise.all(
+      SPEC_FILES.map(async (specFile) => {
+        const dispatchFn = mock(() => Promise.resolve());
+        const body = JSON.stringify({
+          repository: { full_name: "owner/repo" },
+          commits: [{ added: [specFile], modified: [] }],
+        });
+        const sig = await createSignature(testSecret, body);
+        const req = new Request("https://example.com/webhook", {
+          method: "POST",
+          headers: {
+            "x-hub-signature-256": sig,
+            "x-github-event": "push",
+          },
+          body,
+        });
+        const res = await handleRequest(req, env, dispatchFn);
+        return { specFile, res, dispatchFn };
+      }),
+    );
+
+    for (const { specFile, res, dispatchFn } of results) {
       expect(res.status).toBe(200);
       expect(dispatchFn).toHaveBeenCalledTimes(1);
       expect(dispatchFn).toHaveBeenCalledWith(testToken, "owner/repo", "swagen-generate", {
         spec_path: specFile,
       });
-      dispatchFn.mockClear();
     }
   });
 });
