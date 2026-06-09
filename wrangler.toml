@@ -10,3 +10,6 @@ compatibility_flags = ["nodejs_compat"]
 
 [env.production]
 name = "swagen-agentic"
+
+[env.preview]
+name = "swagen-agentic-preview"

@@ -43,7 +43,7 @@ jobs:
 
       - name: Check for dependency updates
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: bunx actions-up --dry-run
 
       - name: Run auto-fix

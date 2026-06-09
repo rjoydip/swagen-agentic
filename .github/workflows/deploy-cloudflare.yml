@@ -1,0 +1,41 @@
+name: Deploy to Cloudflare Workers (Production)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/bot/cloudflare.ts"
+      - "wrangler.toml"
+      - "package.json"
+      - "bun.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: ./.github/actions/setup-env
+      - name: Typecheck
+        run: bun tsc --noEmit
+      - name: Lint
+        run: bun run lint
+      - name: Set Worker Secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "${{ secrets.GITHUB_WEBHOOK_SECRET }}" | bunx wrangler secret put GITHUB_WEBHOOK_SECRET --env production --name swagen-agentic
+          echo "${{ secrets.GITHUB_TOKEN }}" | bunx wrangler secret put GITHUB_TOKEN --env production --name swagen-agentic
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          environment: production
+          workingDirectory: "."

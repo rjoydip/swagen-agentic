@@ -36,7 +36,7 @@ if (APP_MODE === "webhook") {
 // ─── GitHub Actions bot ───────────────────────────────────────────────────────
 
 async function runActionsBot() {
-  const GH_TOKEN = process.env["GITHUB_TOKEN"] ?? "";
+  const GH_TOKEN = process.env["GH_TOKEN"] ?? "";
   const REPO = process.env["GITHUB_REPOSITORY"] ?? "";
   const EVENT = process.env["GITHUB_EVENT_NAME"] ?? "";
   const PR_NUMBER = process.env["PR_NUMBER"] ? parseInt(process.env["PR_NUMBER"]!, 10) : undefined;
@@ -115,7 +115,7 @@ export { findChangedSpecs };
 // ─── GitHub App webhook server ────────────────────────────────────────────────
 
 async function runWebhookServer() {
-  const secret = process.env["GITHUB_WEBHOOK_SECRET"] ?? "";
+  const secret = process.env["WEBHOOK_SECRET"] ?? "";
   const port = parseInt(process.env["PORT"] ?? "3000", 10);
 
   const webhooks = new Webhooks({ secret });
@@ -157,7 +157,7 @@ async function runWebhookServer() {
       prompt: buildPrWebhookPrompt(payload.pull_request.number, payload.repository.full_name),
     });
 
-    const ghToken = process.env["GITHUB_TOKEN"];
+    const ghToken = process.env["GH_TOKEN"];
     if (ghToken) {
       const octokit = new Octokit({ auth: ghToken });
       await upsertPrComment(
@@ -174,9 +174,7 @@ async function runWebhookServer() {
         },
       );
     } else {
-      process.stderr.write(
-        ansi.yellow("[swagen-app] GITHUB_TOKEN not set — skipping PR comment\n"),
-      );
+      process.stderr.write(ansi.yellow("[swagen-app] GH_TOKEN not set — skipping PR comment\n"));
       process.stderr.write(`  summary: ${result.agentSummary.slice(0, 120)}...\n`);
     }
   });

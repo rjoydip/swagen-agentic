@@ -78,9 +78,9 @@
     "actions-up": "^1.14.2",
     "bun-types": "^1.3.14",
     "changelogen": "^0.6.2",
-    "fallow": "^2.89.0",
+    "fallow": "^2.90.0",
     "oxfmt": "^0.52.0",
-    "oxlint": "^1.68.0",
+    "oxlint": "^1.69.0",
     "simple-git-hooks": "^2.13.1",
     "typescript": "^5.9.3",
     "wrangler": "^4.98.0"
