@@ -18,13 +18,24 @@ set -euo pipefail
 
 WORKER_URL="${1:-http://localhost:8787}"
 WEBHOOK_PATH="/webhook"
-WEBHOOK_SECRET="${WEBHOOK_SECRET:-test-webhook-secret-12345}"
+WEBHOOK_SECRET="${WEBHOOK_SECRET:-}"
+
+if [ -z "$WEBHOOK_SECRET" ]; then
+  echo "Error: WEBHOOK_SECRET environment variable is required."
+  echo "Usage: WEBHOOK_SECRET=xxx ./scripts/test-webhook.sh [WORKER_URL]"
+  exit 1
+fi
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+# ─── Test Counter ───────────────────────────────────────────────────────────
+
+PASSED=0
+FAILED=0
 
 # ─── Helper Functions ───────────────────────────────────────────────────────
 
@@ -64,10 +75,11 @@ send_webhook() {
   if [ "$http_code" -eq 200 ]; then
     echo -e "${GREEN}✓ Success (HTTP $http_code)${NC}"
     echo "Response: $body"
+    PASSED=$((PASSED + 1))
   else
     echo -e "${RED}✗ Failed (HTTP $http_code)${NC}"
     echo "Response: $body"
-    return 1
+    FAILED=$((FAILED + 1))
   fi
 }
 
@@ -83,8 +95,10 @@ response=$(curl -s -w "\n%{http_code}" "${WORKER_URL}${WEBHOOK_PATH}")
 http_code=$(echo "$response" | tail -n1)
 if [ "$http_code" -eq 405 ]; then
   echo -e "${GREEN}✓ Correctly rejected GET request (405)${NC}"
+  PASSED=$((PASSED + 1))
 else
   echo -e "${RED}✗ Expected 405, got $http_code${NC}"
+  FAILED=$((FAILED + 1))
 fi
 echo ""
 
@@ -94,8 +108,10 @@ response=$(curl -s -w "\n%{http_code}" -X POST "${WORKER_URL}/other")
 http_code=$(echo "$response" | tail -n1)
 if [ "$http_code" -eq 404 ]; then
   echo -e "${GREEN}✓ Correctly rejected non-webhook path (404)${NC}"
+  PASSED=$((PASSED + 1))
 else
   echo -e "${RED}✗ Expected 404, got $http_code${NC}"
+  FAILED=$((FAILED + 1))
 fi
 echo ""
 
@@ -112,8 +128,10 @@ response=$(curl -s -w "\n%{http_code}" \
 http_code=$(echo "$response" | tail -n1)
 if [ "$http_code" -eq 401 ]; then
   echo -e "${GREEN}✓ Correctly rejected invalid signature (401)${NC}"
+  PASSED=$((PASSED + 1))
 else
   echo -e "${RED}✗ Expected 401, got $http_code${NC}"
+  FAILED=$((FAILED + 1))
 fi
 echo ""
 
@@ -147,4 +165,12 @@ payload='{"action":"closed","repository":{"full_name":"rjoydip/swagen-agentic"},
 send_webhook "pull_request" "$payload"
 echo ""
 
+# ─── Summary ────────────────────────────────────────────────────────────────
+
 echo -e "${YELLOW}=== Tests Complete ===${NC}"
+echo -e "${GREEN}Passed: ${PASSED}${NC}"
+echo -e "${RED}Failed: ${FAILED}${NC}"
+
+if [ "$FAILED" -gt 0 ]; then
+  exit 1
+fi

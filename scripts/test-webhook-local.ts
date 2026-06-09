@@ -5,11 +5,20 @@
  * using Bun's built-in support for Web Crypto API.
  *
  * Usage:
- *   bun run scripts/test-webhook-local.ts
+ *   WEBHOOK_SECRET=xxx GH_TOKEN=xxx bun run scripts/test-webhook-local.ts
  */
 
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "test-webhook-secret-12345";
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "ghp_test-token-12345";
+import worker from "../src/bot/cloudflare";
+import { type Env, createSignature } from "../src/bot/shared";
+
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+const GH_TOKEN = process.env.GH_TOKEN;
+
+if (!WEBHOOK_SECRET || !GH_TOKEN) {
+  console.error("Error: WEBHOOK_SECRET and GH_TOKEN environment variables are required.");
+  console.error("Usage: WEBHOOK_SECRET=xxx GH_TOKEN=xxx bun run scripts/test-webhook-local.ts");
+  process.exit(1);
+}
 
 // ─── Colors ────────────────────────────────────────────────────────────────
 
@@ -18,136 +27,45 @@ const GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m";
 const NC = "\x1b[0m";
 
-// ─── HMAC Signature Helper ─────────────────────────────────────────────────
-
-async function createSignature(secret: string, body: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
-  return (
-    "sha256=" +
-    Array.from(new Uint8Array(mac))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-  );
-}
-
-// ─── Worker Handler (Inline) ───────────────────────────────────────────────
-
-const SPEC_FILES = ["openapi.yaml", "openapi.json", "swagger.yaml", "swagger.json"];
+// ─── Mock Fetch ────────────────────────────────────────────────────────────
 
 interface DispatchCall {
-  token: string;
-  repo: string;
-  eventType: string;
-  payload: Record<string, unknown>;
+  url: string;
+  method: string;
+  body: Record<string, unknown>;
 }
 
-const dispatchCalls: DispatchCall[] = [];
+let dispatchCalls: DispatchCall[] = [];
+const originalFetch = globalThis.fetch;
 
-async function verifySignature(secret: string, body: string, signature: string): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
+function setupMockFetch(): void {
+  dispatchCalls = [];
+  globalThis.fetch = Object.assign(
+    ((url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes("/dispatches") && init?.method === "POST") {
+        dispatchCalls.push({
+          url: urlStr,
+          method: init.method,
+          body: JSON.parse(init.body as string),
+        });
+      }
+      return Promise.resolve(new Response(null, { status: 200 }));
+    }) as typeof fetch,
+    { preconnect: originalFetch.preconnect },
   );
-  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
-  const expected =
-    "sha256=" +
-    Array.from(new Uint8Array(mac))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-  const a = encoder.encode(expected);
-  const b = encoder.encode(signature);
-  if (a.byteLength !== b.byteLength) return false;
-  const dv1 = new Uint8Array(a);
-  const dv2 = new Uint8Array(b);
-  let result = 0;
-  for (let i = 0; i < dv1.length; i++) result |= (dv1[i] ?? 0) ^ (dv2[i] ?? 0);
-  return result === 0;
 }
 
-function getRepoFullName(payload: Record<string, unknown>): string | undefined {
-  return (payload["repository"] as Record<string, unknown>)?.["full_name"] as string | undefined;
-}
-
-async function handleRequest(request: Request): Promise<Response> {
-  if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
-
-  const url = new URL(request.url);
-  if (url.pathname !== "/webhook") {
-    return new Response("Not found", { status: 404 });
-  }
-
-  const signature = request.headers.get("x-hub-signature-256") ?? "";
-  const name = request.headers.get("x-github-event") ?? "";
-  const body = await request.text();
-
-  const verified = await verifySignature(WEBHOOK_SECRET, body, signature);
-  if (!verified) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  const payload = JSON.parse(body) as Record<string, unknown>;
-
-  if (name === "push") {
-    const commits = payload["commits"] as Array<Record<string, string[]>> | undefined;
-    if (!commits) return new Response("OK", { status: 200 });
-
-    const changed = commits
-      .flatMap((c) => [...(c["added"] ?? []), ...(c["modified"] ?? [])])
-      .filter((f: string) => SPEC_FILES.includes(f));
-
-    if (changed.length === 0) return new Response("OK", { status: 200 });
-
-    const repo = getRepoFullName(payload);
-    if (!repo) return new Response("OK", { status: 200 });
-
-    dispatchCalls.push({
-      token: GITHUB_TOKEN,
-      repo,
-      eventType: "swagen-generate",
-      payload: { spec_path: changed[0] },
-    });
-  }
-
-  if (
-    name === "pull_request" &&
-    (payload["action"] === "opened" || payload["action"] === "synchronize")
-  ) {
-    const pr = payload["pull_request"] as Record<string, unknown> | undefined;
-    if (!pr) return new Response("OK", { status: 200 });
-
-    const repo = getRepoFullName(payload);
-    if (!repo) return new Response("OK", { status: 200 });
-
-    dispatchCalls.push({
-      token: GITHUB_TOKEN,
-      repo,
-      eventType: "swagen-generate",
-      payload: {
-        spec_path: "openapi.yaml",
-        auto_commit: "true",
-        run_tests: "true",
-      },
-    });
-  }
-
-  return new Response("OK", { status: 200 });
+function restoreFetch(): void {
+  globalThis.fetch = originalFetch;
 }
 
 // ─── Test Runner ───────────────────────────────────────────────────────────
+
+const env: Env = {
+  GITHUB_WEBHOOK_SECRET: WEBHOOK_SECRET,
+  GH_TOKEN,
+};
 
 async function runTests(): Promise<void> {
   console.log(`${YELLOW}=== Cloudflare Worker Local Tests ===${NC}`);
@@ -160,7 +78,7 @@ async function runTests(): Promise<void> {
   console.log(`${YELLOW}Test 1: Reject GET request${NC}`);
   {
     const req = new Request("http://localhost:8787/webhook", { method: "GET" });
-    const res = await handleRequest(req);
+    const res = await worker.fetch(req, env);
     if (res.status === 405) {
       console.log(`${GREEN}✓ Correctly rejected GET request (405)${NC}`);
       passed++;
@@ -175,7 +93,7 @@ async function runTests(): Promise<void> {
   console.log(`${YELLOW}Test 2: Reject non-webhook path${NC}`);
   {
     const req = new Request("http://localhost:8787/other", { method: "POST" });
-    const res = await handleRequest(req);
+    const res = await worker.fetch(req, env);
     if (res.status === 404) {
       console.log(`${GREEN}✓ Correctly rejected non-webhook path (404)${NC}`);
       passed++;
@@ -193,12 +111,13 @@ async function runTests(): Promise<void> {
     const req = new Request("http://localhost:8787/webhook", {
       method: "POST",
       headers: {
+        "content-type": "application/json",
         "x-hub-signature-256": "sha256=invalidsignature",
         "x-github-event": "push",
       },
       body,
     });
-    const res = await handleRequest(req);
+    const res = await worker.fetch(req, env);
     if (res.status === 401) {
       console.log(`${GREEN}✓ Correctly rejected invalid signature (401)${NC}`);
       passed++;
@@ -209,10 +128,33 @@ async function runTests(): Promise<void> {
   }
   console.log();
 
-  // Test 4: Push event with spec changes
-  console.log(`${YELLOW}Test 4: Push event with spec changes${NC}`);
+  // Test 4: Reject non-JSON content-type
+  console.log(`${YELLOW}Test 4: Reject non-JSON content-type${NC}`);
   {
-    dispatchCalls.length = 0;
+    const req = new Request("http://localhost:8787/webhook", {
+      method: "POST",
+      headers: {
+        "content-type": "text/plain",
+        "x-hub-signature-256": "sha256=invalid",
+        "x-github-event": "push",
+      },
+      body: "plain text",
+    });
+    const res = await worker.fetch(req, env);
+    if (res.status === 415) {
+      console.log(`${GREEN}✓ Correctly rejected non-JSON content-type (415)${NC}`);
+      passed++;
+    } else {
+      console.log(`${RED}✗ Expected 415, got ${res.status}${NC}`);
+      failed++;
+    }
+  }
+  console.log();
+
+  // Test 5: Push event with spec changes
+  console.log(`${YELLOW}Test 5: Push event with spec changes${NC}`);
+  {
+    setupMockFetch();
     const body = JSON.stringify({
       repository: { full_name: "rjoydip/swagen-agentic" },
       commits: [{ added: ["openapi.yaml"], modified: [] }],
@@ -221,28 +163,30 @@ async function runTests(): Promise<void> {
     const req = new Request("http://localhost:8787/webhook", {
       method: "POST",
       headers: {
+        "content-type": "application/json",
         "x-hub-signature-256": sig,
         "x-github-event": "push",
       },
       body,
     });
-    const res = await handleRequest(req);
+    const res = await worker.fetch(req, env);
     if (res.status === 200 && dispatchCalls.length === 1) {
       console.log(`${GREEN}✓ Success - workflow dispatched${NC}`);
-      console.log(`  Repo: ${dispatchCalls[0].repo}`);
-      console.log(`  Spec: ${dispatchCalls[0].payload.spec_path}`);
+      console.log(`  Repo: ${dispatchCalls[0].body.client_payload}`);
+      console.log(`  Spec: ${(dispatchCalls[0].body.client_payload as Record<string, unknown>).spec_path}`);
       passed++;
     } else {
       console.log(`${RED}✗ Failed (HTTP ${res.status}, dispatches: ${dispatchCalls.length})${NC}`);
       failed++;
     }
+    restoreFetch();
   }
   console.log();
 
-  // Test 5: PR opened event
-  console.log(`${YELLOW}Test 5: PR opened event${NC}`);
+  // Test 6: PR opened event
+  console.log(`${YELLOW}Test 6: PR opened event${NC}`);
   {
-    dispatchCalls.length = 0;
+    setupMockFetch();
     const body = JSON.stringify({
       action: "opened",
       repository: { full_name: "rjoydip/swagen-agentic" },
@@ -252,28 +196,30 @@ async function runTests(): Promise<void> {
     const req = new Request("http://localhost:8787/webhook", {
       method: "POST",
       headers: {
+        "content-type": "application/json",
         "x-hub-signature-256": sig,
         "x-github-event": "pull_request",
       },
       body,
     });
-    const res = await handleRequest(req);
+    const res = await worker.fetch(req, env);
     if (res.status === 200 && dispatchCalls.length === 1) {
       console.log(`${GREEN}✓ Success - workflow dispatched${NC}`);
-      console.log(`  Repo: ${dispatchCalls[0].repo}`);
-      console.log(`  Auto-commit: ${dispatchCalls[0].payload.auto_commit}`);
+      console.log(`  Repo: ${dispatchCalls[0].body.client_payload}`);
+      console.log(`  Auto-commit: ${(dispatchCalls[0].body.client_payload as Record<string, unknown>).auto_commit}`);
       passed++;
     } else {
       console.log(`${RED}✗ Failed (HTTP ${res.status}, dispatches: ${dispatchCalls.length})${NC}`);
       failed++;
     }
+    restoreFetch();
   }
   console.log();
 
-  // Test 6: Push without spec changes (no dispatch)
-  console.log(`${YELLOW}Test 6: Push without spec changes${NC}`);
+  // Test 7: Push without spec changes (no dispatch)
+  console.log(`${YELLOW}Test 7: Push without spec changes${NC}`);
   {
-    dispatchCalls.length = 0;
+    setupMockFetch();
     const body = JSON.stringify({
       repository: { full_name: "rjoydip/swagen-agentic" },
       commits: [{ added: ["README.md"], modified: ["src/index.ts"] }],
@@ -282,12 +228,13 @@ async function runTests(): Promise<void> {
     const req = new Request("http://localhost:8787/webhook", {
       method: "POST",
       headers: {
+        "content-type": "application/json",
         "x-hub-signature-256": sig,
         "x-github-event": "push",
       },
       body,
     });
-    const res = await handleRequest(req);
+    const res = await worker.fetch(req, env);
     if (res.status === 200 && dispatchCalls.length === 0) {
       console.log(`${GREEN}✓ Success - no dispatch (as expected)${NC}`);
       passed++;
@@ -295,6 +242,7 @@ async function runTests(): Promise<void> {
       console.log(`${RED}✗ Failed (expected 0 dispatches, got ${dispatchCalls.length})${NC}`);
       failed++;
     }
+    restoreFetch();
   }
   console.log();
 

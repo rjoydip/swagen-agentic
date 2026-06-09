@@ -15,7 +15,13 @@
 
 const WORKER_URL = process.argv[2] || "http://localhost:8787";
 const WEBHOOK_PATH = "/webhook";
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "test-webhook-secret-12345";
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+
+if (!WEBHOOK_SECRET) {
+  console.error("Error: WEBHOOK_SECRET environment variable is required.");
+  console.error("Usage: WEBHOOK_SECRET=xxx bun run scripts/test-webhook.ts [WORKER_URL]");
+  process.exit(1);
+}
 
 // ─── Colors ────────────────────────────────────────────────────────────────
 

@@ -29,9 +29,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          echo "${{ secrets.GITHUB_WEBHOOK_SECRET }}" | bunx wrangler secret put GITHUB_WEBHOOK_SECRET --env production --name swagen-agentic
-          echo "${{ secrets.GITHUB_TOKEN }}" | bunx wrangler secret put GITHUB_TOKEN --env production --name swagen-agentic
+          bunx wrangler secret put GITHUB_WEBHOOK_SECRET --env production --name swagen-agentic <<< "$GITHUB_WEBHOOK_SECRET"
+          bunx wrangler secret put GH_TOKEN --env production --name swagen-agentic <<< "$GH_TOKEN"
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
         with:

@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 # These should be set via wrangler secret:
 # GITHUB_WEBHOOK_SECRET — GitHub App webhook secret
-# GITHUB_TOKEN — GitHub token with repo scope for dispatching workflows
+# GH_TOKEN — GitHub token with repo scope for dispatching workflows
 
 [env.production]
 name = "swagen-agentic"

@@ -1,73 +1,17 @@
 /**
- * tests/cloudflare-worker-integration.test.ts — Integration tests for Cloudflare Worker.
+ * tests/integration/cloudflare-worker.test.ts — Integration tests for Cloudflare Worker.
  *
  * Tests the actual Worker handler with real Web Crypto API.
- * Run with: bun test tests/cloudflare-worker-integration.test.ts
+ * Run with: bun test tests/integration/cloudflare-worker.test.ts
  *
  * For local development with wrangler dev:
  *   bunx wrangler dev --port 8787
  *   bun run tests/scripts/test-webhook.sh
  */
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-
-// ─── HMAC Signature Helper ─────────────────────────────────────────────────
-
-async function createSignature(secret: string, body: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
-  return (
-    "sha256=" +
-    Array.from(new Uint8Array(mac))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-  );
-}
-
-// ─── Worker Handler (Direct Import) ────────────────────────────────────────
-
-interface Env {
-  GITHUB_WEBHOOK_SECRET: string;
-  GITHUB_TOKEN: string;
-}
-
-const SPEC_FILES = ["openapi.yaml", "openapi.json", "swagger.yaml", "swagger.json"];
-
-async function verifySignature(secret: string, body: string, signature: string): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
-  const expected =
-    "sha256=" +
-    Array.from(new Uint8Array(mac))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-  const a = encoder.encode(expected);
-  const b = encoder.encode(signature);
-  if (a.byteLength !== b.byteLength) return false;
-  const dv1 = new Uint8Array(a);
-  const dv2 = new Uint8Array(b);
-  let result = 0;
-  for (let i = 0; i < dv1.length; i++) result |= (dv1[i] ?? 0) ^ (dv2[i] ?? 0);
-  return result === 0;
-}
-
-function getRepoFullName(payload: Record<string, unknown>): string | undefined {
-  return (payload["repository"] as Record<string, unknown>)?.["full_name"] as string | undefined;
-}
+import { describe, test, expect, afterAll, mock, beforeEach } from "bun:test";
+import worker from "../../src/bot/cloudflare";
+import { type Env, createSignature } from "../../src/bot/shared";
 
 // ─── Mock Dispatch Tracking ────────────────────────────────────────────────
 
@@ -80,76 +24,9 @@ interface DispatchCall {
 
 let dispatchCalls: DispatchCall[] = [];
 
-function mockDispatch(
-  token: string,
-  repo: string,
-  eventType: string,
-  payload: Record<string, unknown>,
-): Promise<void> {
-  dispatchCalls.push({ token, repo, eventType, payload });
-  return Promise.resolve();
-}
-
-// ─── Worker Handler ────────────────────────────────────────────────────────
-
-async function handleRequest(request: Request, env: Env): Promise<Response> {
-  if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
-
-  const url = new URL(request.url);
-  if (url.pathname !== "/webhook") {
-    return new Response("Not found", { status: 404 });
-  }
-
-  const signature = request.headers.get("x-hub-signature-256") ?? "";
-  const name = request.headers.get("x-github-event") ?? "";
-  const body = await request.text();
-
-  const verified = await verifySignature(env.GITHUB_WEBHOOK_SECRET, body, signature);
-  if (!verified) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  const payload = JSON.parse(body) as Record<string, unknown>;
-
-  if (name === "push") {
-    const commits = payload["commits"] as Array<Record<string, string[]>> | undefined;
-    if (!commits) return new Response("OK", { status: 200 });
-
-    const changed = commits
-      .flatMap((c) => [...(c["added"] ?? []), ...(c["modified"] ?? [])])
-      .filter((f: string) => SPEC_FILES.includes(f));
-
-    if (changed.length === 0) return new Response("OK", { status: 200 });
-
-    const repo = getRepoFullName(payload);
-    if (!repo) return new Response("OK", { status: 200 });
-
-    await mockDispatch(env.GITHUB_TOKEN, repo, "swagen-generate", {
-      spec_path: changed[0],
-    });
-  }
-
-  if (
-    name === "pull_request" &&
-    (payload["action"] === "opened" || payload["action"] === "synchronize")
-  ) {
-    const pr = payload["pull_request"] as Record<string, unknown> | undefined;
-    if (!pr) return new Response("OK", { status: 200 });
-
-    const repo = getRepoFullName(payload);
-    if (!repo) return new Response("OK", { status: 200 });
-
-    await mockDispatch(env.GITHUB_TOKEN, repo, "swagen-generate", {
-      spec_path: "openapi.yaml",
-      auto_commit: "true",
-      run_tests: "true",
-    });
-  }
-
-  return new Response("OK", { status: 200 });
-}
+// Mock fetch to capture dispatchWorkflow calls
+const originalFetch = globalThis.fetch;
+let fetchMock: ReturnType<typeof mock>;
 
 // ─── Tests ─────────────────────────────────────────────────────────────────
 
@@ -158,19 +35,33 @@ describe("Cloudflare Worker Integration", () => {
   const testToken = "ghp_integration-test-token-67890";
   const env: Env = {
     GITHUB_WEBHOOK_SECRET: testSecret,
-    GITHUB_TOKEN: testToken,
+    GH_TOKEN: testToken,
   };
 
-  beforeAll(() => {
+  beforeEach(() => {
     dispatchCalls = [];
+    fetchMock = mock((url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
+      if (urlStr.includes("/dispatches") && init?.method === "POST") {
+        const body = JSON.parse(init.body as string);
+        const headers = init.headers as Record<string, string>;
+        dispatchCalls.push({
+          token: headers?.Authorization?.replace("Bearer ", "") || "",
+          repo: urlStr.split("/repos/")[1]?.split("/dispatches")[0] || "",
+          eventType: body.event_type,
+          payload: body.client_payload,
+        });
+      }
+      return Promise.resolve(new Response(null, { status: 200 }));
+    });
+    globalThis.fetch = Object.assign(fetchMock, { preconnect: originalFetch.preconnect });
   });
 
   afterAll(() => {
-    dispatchCalls = [];
+    globalThis.fetch = originalFetch;
   });
 
   test("full webhook flow: push with spec changes", async () => {
-    dispatchCalls = [];
     const body = JSON.stringify({
       repository: { full_name: "rjoydip/swagen-agentic" },
       commits: [
@@ -192,7 +83,7 @@ describe("Cloudflare Worker Integration", () => {
       body,
     });
 
-    const res = await handleRequest(req, env);
+    const res = await worker.fetch(req, env);
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("OK");
@@ -206,7 +97,6 @@ describe("Cloudflare Worker Integration", () => {
   });
 
   test("full webhook flow: PR opened", async () => {
-    dispatchCalls = [];
     const body = JSON.stringify({
       action: "opened",
       repository: { full_name: "rjoydip/swagen-agentic" },
@@ -224,7 +114,7 @@ describe("Cloudflare Worker Integration", () => {
       body,
     });
 
-    const res = await handleRequest(req, env);
+    const res = await worker.fetch(req, env);
 
     expect(res.status).toBe(200);
     expect(dispatchCalls).toHaveLength(1);
@@ -236,7 +126,6 @@ describe("Cloudflare Worker Integration", () => {
   });
 
   test("multiple spec files: dispatches only first", async () => {
-    dispatchCalls = [];
     const body = JSON.stringify({
       repository: { full_name: "rjoydip/swagen-agentic" },
       commits: [
@@ -253,11 +142,12 @@ describe("Cloudflare Worker Integration", () => {
       headers: {
         "x-hub-signature-256": sig,
         "x-github-event": "push",
+        "content-type": "application/json",
       },
       body,
     });
 
-    const res = await handleRequest(req, env);
+    const res = await worker.fetch(req, env);
 
     expect(res.status).toBe(200);
     expect(dispatchCalls).toHaveLength(1);
@@ -277,11 +167,12 @@ describe("Cloudflare Worker Integration", () => {
       headers: {
         "x-hub-signature-256": sig,
         "x-github-event": "push",
+        "content-type": "application/json",
       },
       body,
     });
 
-    const res = await handleRequest(req, env);
+    const res = await worker.fetch(req, env);
 
     expect(res.status).toBe(401);
   });
@@ -295,5 +186,22 @@ describe("Cloudflare Worker Integration", () => {
 
     // Verify it's the correct length
     expect(sig.length).toBe(71); // "sha256=" (7) + 64 hex chars
+  });
+
+  test("rejects non-JSON content-type", async () => {
+    const body = "plain text";
+    const req = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: {
+        "content-type": "text/plain",
+        "x-hub-signature-256": "sha256=invalid",
+        "x-github-event": "push",
+      },
+      body,
+    });
+
+    const res = await worker.fetch(req, env);
+
+    expect(res.status).toBe(415);
   });
 });
