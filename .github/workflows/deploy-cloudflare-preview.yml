@@ -43,7 +43,8 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const url = `https://${{ steps.deploy.outputs.workers-url }}`;
+            const deploymentUrl = `${{ steps.deploy.outputs.deployment-url }}`;
+            const url = deploymentUrl ? `https://${deploymentUrl}` : 'https://<worker-url-not-available>';
             const body = `🚀 **Preview Deployment Ready**\n\nWorker URL: ${url}\n\n_Deployed from commit ${context.sha.slice(0,7)}_`;
 
             // Find existing comment
