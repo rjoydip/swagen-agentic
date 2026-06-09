@@ -9,7 +9,7 @@ swagen supports two GitHub integration modes:
 
 ## Mode 1 — GitHub Actions bot
 
-No GitHub App registration needed. Uses `GITHUB_TOKEN` provided by Actions.
+No GitHub App registration needed. Uses `GH_TOKEN` provided by Actions.
 
 ### Setup
 
@@ -74,8 +74,8 @@ Settings → GitHub Apps → swagen → Install → choose repositories.
 ### Step 3: Run the webhook server
 
 ```bash
-export GITHUB_TOKEN=<your-installation-access-token>
-export GITHUB_WEBHOOK_SECRET=<the-secret-from-step-1>
+export GH_TOKEN=<your-installation-access-token>
+export WEBHOOK_SECRET=<the-secret-from-step-1>
 export ANTHROPIC_API_KEY=<your-key>
 export APP_MODE=webhook
 export PORT=3000
@@ -154,18 +154,18 @@ Generated files:
 
 The webhook server distinguishes between two failure modes:
 
-| Scenario                                    | HTTP status                 | Meaning                                         |
-| ------------------------------------------- | --------------------------- | ----------------------------------------------- |
-| Invalid HMAC signature                      | `401 Unauthorized`          | Webhook secret mismatch or tampered payload     |
-| Handler error (e.g. missing `GITHUB_TOKEN`) | `500 Internal Server Error` | The webhook was verified but the handler failed |
+| Scenario                                | HTTP status                 | Meaning                                         |
+| --------------------------------------- | --------------------------- | ----------------------------------------------- |
+| Invalid HMAC signature                  | `401 Unauthorized`          | Webhook secret mismatch or tampered payload     |
+| Handler error (e.g. missing `GH_TOKEN`) | `500 Internal Server Error` | The webhook was verified but the handler failed |
 
-If `GITHUB_TOKEN` is not set, the PR handler runs the agent but **skips posting the PR comment** — useful for local testing or read-only deployments.
+If `GH_TOKEN` is not set, the PR handler runs the agent but **skips posting the PR comment** — useful for local testing or read-only deployments.
 
 ---
 
 ## Security notes
 
 - The webhook secret is verified via HMAC-SHA256 on every request.
-- `GITHUB_TOKEN` should be scoped to the minimum required permissions.
+- `GH_TOKEN` should be scoped to the minimum required permissions.
 - For multi-tenant installations, use a GitHub App private key to generate per-installation tokens.
 - Set `SWAGEN_AUTO_COMMIT=false` unless you trust the generated output — review in dry-run mode first.

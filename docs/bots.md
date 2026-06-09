@@ -20,7 +20,7 @@ It activates on push/PR to spec files and can also be triggered via
    | Secret              | Required | Description            |
    | ------------------- | -------- | ---------------------- |
    | `ANTHROPIC_API_KEY` | Yes      | LLM provider key       |
-   | `GITHUB_TOKEN`      | Auto     | Provided by Actions    |
+   | `GH_TOKEN`          | Auto     | Provided by Actions    |
    | `API_BASE_URL`      | No       | Base URL for API tests |
 
 2. The workflow already lives at `.github/workflows/swagen.yml`. It:
@@ -74,10 +74,10 @@ in GitHub Actions via the existing `.github/workflows/swagen.yml`.
 2. **Set worker secrets:**
 
 ```bash
-bunx wrangler secret put GITHUB_WEBHOOK_SECRET
+bunx wrangler secret put WEBHOOK_SECRET
 # Paste your webhook secret
 
-bunx wrangler secret put GITHUB_TOKEN
+bunx wrangler secret put GH_TOKEN
 # Paste your GitHub token (repo scope)
 ```
 
@@ -110,10 +110,10 @@ cloudflared tunnel --url http://localhost:8787
 
 ### Environment Variables (configured via `wrangler secret`)
 
-| Variable                | Required | Description                    |
-| ----------------------- | -------- | ------------------------------ |
-| `GITHUB_WEBHOOK_SECRET` | Yes      | GitHub App webhook secret      |
-| `GITHUB_TOKEN`          | Yes      | GitHub token with `repo` scope |
+| Variable         | Required | Description                    |
+| ---------------- | -------- | ------------------------------ |
+| `WEBHOOK_SECRET` | Yes      | GitHub App webhook secret      |
+| `GH_TOKEN`       | Yes      | GitHub token with `repo` scope |
 
 ### How it works
 
@@ -141,7 +141,7 @@ The bot file can also run as a standalone Node.js/Bun server for testing:
 
 ```bash
 # Run as webhook server (listens on :3000)
-APP_MODE=webhook GITHUB_WEBHOOK_SECRET=mysecret bun run src/bot/github.ts
+APP_MODE=webhook WEBHOOK_SECRET=mysecret bun run src/bot/github.ts
 ```
 
 ### Testing the webhook server locally
@@ -150,7 +150,7 @@ Start the server in one terminal, then send a test push event from another:
 
 ```bash
 # Terminal 1: start server
-APP_MODE=webhook GITHUB_WEBHOOK_SECRET=mysecret bun run src/bot/github.ts
+APP_MODE=webhook WEBHOOK_SECRET=mysecret bun run src/bot/github.ts
 ```
 
 <details>

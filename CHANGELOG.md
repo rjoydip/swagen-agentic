@@ -28,7 +28,7 @@
 ### Changed
 
 - **Webhook server error handling** — distinguishes signature errors (`401`) from handler errors (`500`)
-- **PR handler** — skips comment posting when `GITHUB_TOKEN` is not set (no longer crashes)
+- **PR handler** — skips comment posting when `GH_TOKEN` is not set (no longer crashes)
 - `SwagenHarness.run()` logs active/inactive skills at startup
 - Removed `chalk`, `commander`, `dedent`, `ora` — replaced with native ANSI + arg parser in `src/utils/fmt.ts`
 - Moved all agent logic into `SwagenHarness` (previously split across `SwagenAgent` + `runAgentOnce`)

@@ -41,7 +41,7 @@ The session may have been stored with a different storage backend.
 The GitHub App webhook endpoint is `POST /webhook`. Ensure:
 
 1. The webhook URL is configured correctly in GitHub App settings
-2. The secret matches `GITHUB_WEBHOOK_SECRET` env var
+2. The secret matches `WEBHOOK_SECRET` env var
 3. The server is publicly accessible (use ngrok for local dev)
 
 ## Debugging

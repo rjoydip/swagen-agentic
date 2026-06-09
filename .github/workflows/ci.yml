@@ -83,7 +83,7 @@ jobs:
       - name: Run swagen agent
         id: swagen
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           SWAGEN_SPEC_PATH: ${{ steps.spec.outputs.path }}
           SWAGEN_OUT_DIR: .swagen/tests/bun_api
