@@ -48,6 +48,7 @@
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "test:webhook": "bun run scripts/test-webhook.ts",
+    "test:webhook:local": "bun run scripts/test-webhook-local.ts",
     "typecheck": "bun tsc --noEmit",
     "lint": "oxlint . --format=github",
     "lint:fix": "oxlint . --fix && oxfmt .",
