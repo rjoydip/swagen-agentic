@@ -47,6 +47,7 @@
     "test:int": "bun test tests/integration/",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
+    "test:webhook": "bun run scripts/test-webhook.ts",
     "typecheck": "bun tsc --noEmit",
     "lint": "oxlint . --format=github",
     "lint:fix": "oxlint . --fix && oxfmt .",

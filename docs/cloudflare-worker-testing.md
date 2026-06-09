@@ -4,11 +4,12 @@ Tests for the Cloudflare Worker webhook handler.
 
 ## Test Files
 
-| File                                          | Description                                |
-| --------------------------------------------- | ------------------------------------------ |
-| `tests/cloudflare-worker.test.ts`             | Unit tests for webhook handler             |
+| File | Description |
+|------|-------------|
+| `tests/cloudflare-worker.test.ts` | Unit tests for webhook handler |
 | `tests/cloudflare-worker-integration.test.ts` | Integration tests with real Web Crypto API |
-| `scripts/test-webhook.sh`                     | Shell script for manual webhook testing    |
+| `scripts/test-webhook.ts` | TypeScript script for manual webhook testing |
+| `scripts/test-webhook.sh` | Shell script alternative (requires bash + openssl) |
 
 ## Running Tests
 
@@ -34,23 +35,28 @@ bun test tests/cloudflare-worker
 
 ### 1. Start Wrangler Dev Server
 
+**Important**: Use Node.js (not Bun) for wrangler dev:
+
 ```bash
 # Set test secrets
 export WEBHOOK_SECRET="test-webhook-secret-12345"
 export GH_TOKEN="ghp_test-token-12345"
 
-# Start local development server
-bunx wrangler dev --port 8787
+# Start local development server (use npx, not bunx)
+npx wrangler dev --port 8787
 ```
 
 ### 2. Run Webhook Test Script
 
 ```bash
-# Run all tests
-./scripts/test-webhook.sh
+# Using Bun (recommended)
+bun run test:webhook
+
+# Or directly
+bun run scripts/test-webhook.ts
 
 # Test against specific URL
-./scripts/test-webhook.sh https://your-worker.workers.dev
+bun run scripts/test-webhook.ts https://your-worker.workers.dev
 ```
 
 ### 3. Manual Testing with curl
@@ -80,7 +86,7 @@ export WORKER_URL="https://swagen-agentic.workers.dev"
 ### 2. Run Test Script
 
 ```bash
-./scripts/test-webhook.sh $WORKER_URL
+bun run scripts/test-webhook.ts $WORKER_URL
 ```
 
 ### 3. Test via GitHub
@@ -107,10 +113,10 @@ The tests cover:
 
 ```bash
 # Local development
-bunx wrangler dev --port 8787 --log-level debug
+npx wrangler dev --port 8787 --log-level debug
 
 # Production (if you have access)
-bunx wrangler tail --env production
+npx wrangler tail --env production
 ```
 
 ### Verify Signature Generation
@@ -122,4 +128,5 @@ echo -n '{"test":true}' | openssl dgst -sha256 -hmac "your-secret"
 
 ---
 
-_Created: 2025-06-09_
+*Created: 2025-06-09*
+*Updated: 2025-06-09 (added Bun-based test script)*
